@@ -8,8 +8,8 @@ from skimage.filters import sobel
 from scipy.stats import skew, kurtosis, entropy
 
 
-DATASET_OFFICIAL = "data/Official"
-OUTPUT_DIR = "processed_data/Official"
+DATASET_OFFICIAL = "ai_trace_finder\data\official"
+OUTPUT_DIR = "ai_trace_finder\processed_data\official"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 CSV_PATH = os.path.join(OUTPUT_DIR, "metadata_features.csv")
 
