@@ -6,11 +6,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 
-CSV_PATH = r"processed_data\combined.csv"
+CSV_PATH = r"processed_data\combined_features.csv"
 
 def train_models():
     df = pd.read_csv(CSV_PATH)
-    X = df.drop(columns=["file_name", "main_class", "resolution", "class_label"])
+    X = df.drop(columns=["file_name","dataset_source", "main_class", "resolution", "class_label"])
     y = df["class_label"]
 
     X_train, X_test, y_train, y_test = train_test_split(
