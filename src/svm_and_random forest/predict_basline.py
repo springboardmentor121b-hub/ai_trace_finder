@@ -1,66 +1,116 @@
 import numpy as np
-import joblib
 import pandas as pd
-from skimage.filters import sobel
-from scipy.stats import skew, kurtosis, entropy
+import joblib
 import os
 
-SCALER_PATH = r"D:\project\Tracefinder\models\scaler.pkl"
-MODEL_PATH = r"D:\project\Tracefinder\models\random_forest.pkl"
+from skimage import io, img_as_float
+from skimage.filters import sobel
+from skimage.restoration import denoise_wavelet
+from scipy.stats import skew, kurtosis, entropy
 
-def load_npy_image(npy_path):
-    img = np.load(npy_path)
-    img = img.astype(np.float32)
-    if img.max() > 1:
-        img /= 255.0
+
+# ===================== PATHS =====================
+
+MODEL_DIR = r"D:\Project\TraceFinder\models\svm_random"
+
+SCALER_PATH = os.path.join(MODEL_DIR, "scaler.pkl")
+MODEL_PATH = os.path.join(MODEL_DIR, "random_forest.pkl")   # change to svm.pkl if needed
+LE_PATH = os.path.join(MODEL_DIR, "label_encoder.pkl")
+
+
+# ===================== IMAGE LOADING =====================
+
+def load_tif_image(tif_path):
+    img = io.imread(tif_path, as_gray=True)
+    img = img_as_float(img)
     return img
+
+
+# ===================== FEATURE EXTRACTION =====================
+
+def extract_noise_residual(img):
+    denoised = denoise_wavelet(
+        img,
+        channel_axis=None,
+        rescale_sigma=True
+    )
+    return img - denoised
+
+
+def extract_fft_features(img):
+    fft = np.fft.fft2(img)
+    fft_shift = np.fft.fftshift(fft)
+    magnitude = np.abs(fft_shift)
+    return np.mean(magnitude), np.std(magnitude)
+
 
 def extract_features(img, file_path):
     h, w = img.shape
-    aspect_ratio = w / h
-    file_size_kb = os.path.getsize(file_path) / 1024
-
     pixels = img.flatten()
-    mean_intensity = np.mean(pixels)
-    std_intensity = np.std(pixels)
-    skewness = skew(pixels)
-    kurt = kurtosis(pixels)
 
-    ent = entropy(np.histogram(pixels, bins=256, range=(0, 1))[0] + 1e-6)
+    residual = extract_noise_residual(img)
+    residual_pixels = residual.flatten()
 
-    edges = sobel(img)
-    edge_density = np.mean(edges > 0.1)
+    fft_mean, fft_std = extract_fft_features(img)
 
-    return {
+    features = {
         "width": w,
         "height": h,
-        "aspect_ratio": aspect_ratio,
-        "file_size_kb": file_size_kb,
-        "mean_intensity": mean_intensity,
-        "std_intensity": std_intensity,
-        "skewness": skewness,
-        "kurtosis": kurt,
-        "entropy": ent,
-        "edge_density": edge_density
+        "aspect_ratio": w / h,
+        "file_size_kb": os.path.getsize(file_path) / 1024,
+
+        "mean_intensity": np.mean(pixels),
+        "std_intensity": np.std(pixels),
+        "skewness": skew(pixels),
+        "kurtosis": kurtosis(pixels),
+
+        "entropy": entropy(
+            np.histogram(pixels, bins=256, range=(0, 1))[0] + 1e-6
+        ),
+
+        "edge_density": np.mean(sobel(img) > 0.1),
+
+        "fft_mean": fft_mean,
+        "fft_std": fft_std,
+
+        "residual_mean": np.mean(residual_pixels),
+        "residual_std": np.std(residual_pixels)
     }
 
-def predict_scanner(npy_path):
+    return features
+
+
+# ===================== PREDICTION =====================
+
+def predict_scanner(tif_path):
     scaler = joblib.load(SCALER_PATH)
     model = joblib.load(MODEL_PATH)
+    label_encoder = joblib.load(LE_PATH)
 
-    img = load_npy_image(npy_path)
-    features = extract_features(img, npy_path)
+    img = load_tif_image(tif_path)
+    features = extract_features(img, tif_path)
 
     df = pd.DataFrame([features])
+
+    # 🔥 ENSURE SAME FEATURE ORDER AS TRAINING
+    df = df[scaler.feature_names_in_]
+
     X_scaled = scaler.transform(df)
 
-    prediction = model.predict(X_scaled)[0]
-    probability = model.predict_proba(X_scaled)[0]
+    pred_encoded = model.predict(X_scaled)[0]
+    pred_label = label_encoder.inverse_transform([pred_encoded])[0]
 
-    return prediction, probability
+    probabilities = model.predict_proba(X_scaled)[0]
+
+    return pred_label, probabilities
+
+
+# ===================== MAIN =====================
 
 if __name__ == "__main__":
-    test_file = r"D:\Project\TraceFinder\data\Canon9000-1\300\s4_1_0.npy"
-    pred, prob = predict_scanner(test_file)
-    print("Predicted Scanner:", pred)
-    print("Probabilities:", prob)
+    test_file = r"D:\Project\TraceFinder\data\Official\Canon120-1\150\s1_1.tif"
+
+    prediction, probs = predict_scanner(test_file)
+
+    print("Predicted Scanner :", prediction)
+    print("Class Probabilities:", probs)
