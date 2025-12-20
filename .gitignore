@@ -2,7 +2,6 @@
 __pycache__/
 
 # Results and outputs
-results/
 processed_data/
 patches/
 
@@ -16,8 +15,6 @@ data/
 *.csv
 
 
-models/cnn/
 
-models/
 *.pkl
-*.pth
+
