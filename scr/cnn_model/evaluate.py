@@ -48,13 +48,13 @@ def evaluate_model(model_path="models/cnn_model.pth", batch_size=32, data_path="
     print(cm)
     
     # Optional: Save conf matrix plot
-    # plt.figure(figsize=(10, 8))
-    # sns.heatmap(cm, annot=True, fmt='d', xticklabels=classes, yticklabels=classes)
-    # plt.xlabel('Predicted')
-    # plt.ylabel('True')
-    # plt.title('Confusion Matrix')
-    # plt.savefig('models/confusion_matrix.png')
-    # print("Confusion matrix saved to models/confusion_matrix.png")
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', xticklabels=classes, yticklabels=classes)
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix')
+    plt.savefig('models/confusion_matrix.png')
+    print("Confusion matrix saved to models/confusion_matrix.png")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate CNN Model")
