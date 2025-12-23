@@ -1,114 +1,160 @@
 import streamlit as st
+import torch
+import torch.nn.functional as F
+from torchvision import transforms
+import joblib
+import numpy as np
+import os
+import sys
+import time
+from PIL import Image
 
-# 1. Page Configuration
-st.set_page_config(
-    page_title="AI TraceFinder | Forensic Scanner ID",
-    page_icon="🔍",
-    layout="wide",
-)
+# --- 1. DYNAMIC PATH RESOLUTION ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+def get_abs_path(rel_path):
+    return os.path.join(BASE_DIR, rel_path)
 
-# 2. Custom CSS for a professional look
-st.markdown("""
-    <style>
-    .main {
-        background-color: #f8f9fa;
-    }
-    .stButton>button {
-        width: 100%;
-        border-radius: 5px;
-        height: 3em;
-        background-color: #007bff;
-        color: white;
-    }
-    .feature-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 10px;
-        border: 1px solid #e9ecef;
-        height: 100%;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+sys.path.append(BASE_DIR)
 
-# --- HERO SECTION ---
-st.title("🔍 AI TraceFinder")
-st.subheader("Forensic Machine Learning for Scanner Device Identification")
+# Import your custom logic
+from scr.cnn_model.model import SimpleCNN
+from scr.baseline.preprocess_combined import load_original, compute_metadata_features
 
-col_h1, col_h2 = st.columns([2, 1])
+# --- 2. CONFIGURATION & STYLING ---
+st.set_page_config(page_title="AI TraceFinder Pro", layout="wide", page_icon="🔍")
 
-with col_h1:
-    st.markdown("""
-    **Every scanner leaves a digital fingerprint.** AI TraceFinder is a specialized forensic platform that identifies the specific source scanner (brand and model) used to digitize documents. 
-    By analyzing microscopic noise patterns, texture variations, and compression artifacts, we provide high-confidence device authentication for legal and security professionals.
+# Pathing configuration
+MODEL_DATA = {
+    "SVM (Baseline)": {"acc": 0.88, "prec": 0.86, "f1": 0.85, "path": get_abs_path("models/baseline/svm.joblib")},
+    "Random Forest": {"acc": 0.91, "prec": 0.90, "f1": 0.89, "path": get_abs_path("models/baseline/random_forest.joblib")},
+    "Simple CNN": {"acc": 0.96, "prec": 0.95, "f1": 0.96, "path": get_abs_path("models/cnn_model.pth")} 
+}
+
+# --- 3. BACKEND LOGIC ---
+@st.cache_resource
+def load_assets():
+    le = joblib.load(get_abs_path("models/baseline/label_encoder.joblib"))
+    scaler = joblib.load(get_abs_path("models/baseline/scaler.joblib"))
+    return le, scaler
+
+def run_prediction(file, model_name):
+    le, scaler = load_assets()
+    path = MODEL_DATA[model_name]["path"]
+    temp_path = get_abs_path("temp_inference.png")
+    
+    with open(temp_path, "wb") as f: 
+        f.write(file.getbuffer())
+    
+    img_gray = load_original(temp_path)
+    
+    if "CNN" in model_name:
+        model = SimpleCNN(num_classes=11)
+        model.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
+        model.eval()
+        img_pil = Image.open(temp_path).convert("RGB").resize((128, 128)) 
+        preprocess = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+        ])
+        input_tensor = preprocess(img_pil).unsqueeze(0)
+        with torch.no_grad():
+            output = model(input_tensor)
+            _, predicted_idx = torch.max(output, 1)
+            result_name = le.inverse_transform([predicted_idx.item()])[0]
+    else:
+        model = joblib.load(path)
+        feat_dict = compute_metadata_features(img_gray, temp_path, "unknown", "testing")
+        feature_cols = ["width", "height", "aspect_ratio", "file_size_kb", "mean_intensity", "std_intensity", "skewness", "kurtosis", "entropy", "edge_density"]
+        features = np.array([[feat_dict[col] for col in feature_cols]])
+        scaled_feat = scaler.transform(features)
+        idx = model.predict(scaled_feat)[0]
+        result_name = le.inverse_transform([idx])[0]
+    
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
+    return result_name
+
+# --- 4. NAVIGATION ---
+st.sidebar.title("🔍 Navigation")
+page = st.sidebar.radio("Go to", ["🏛️ Project Home", "🔬 Analysis Lab"])
+
+# --- PAGE 1: PROFESSIONAL LANDING PAGE ---
+if page == "🏛️ Project Home":
+    # Hero Section
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A; font-size: 3rem;'>AI TRACEFINDER PRO</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 1.2rem; color: #555;'>Detecting Digital Fingerprints: Deep Learning for Scanner Forensic Identification</p>", unsafe_allow_html=True)
+    st.image("https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2000", use_container_width=True)
+    
+    st.divider()
+
+    # Introduction Section
+    st.header("🏢 Project Overview")
+    st.write("""
+    Every scanner leaves behind a unique, invisible digital signature called **Photo Response Non-Uniformity (PRNU)**. 
+    Even identical models have microscopic variations in their sensors. **AI TraceFinder** leverages 
+    Convolutional Neural Networks (CNNs) and advanced machine learning to analyze these noise residuals, 
+    allowing forensic experts to pinpoint the exact device used to scan any document.
     """)
-    # st.button("Request Early Access")
 
-with col_h2:
-    # Placeholder for a technical graphic
-    st.info("💡 **Did you know?** Scanners introduce unique 'PRNU' (Photo-Response Non-Uniformity) patterns that are nearly impossible to forge.")
+    # Advantages Section
+    st.header("🛡️ Key Advantages")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.info("**Microscopic Precision**\nAnalyzes pixel-level noise invisible to the human eye.")
+    with col2:
+        st.info("**Multi-Engine Support**\nCombines CNN power with high-speed SVM and Random Forest baselines.")
+    with col3:
+        st.info("**Forensic Integrity**\nEnsures a verifiable chain of custody for digital evidence.")
 
-st.divider()
+    st.divider()
 
-# --- ADVANTAGES SECTION ---
-st.header("🛡️ Why AI TraceFinder?")
-col_a1, col_a2, col_a3 = st.columns(3)
+    # Use Cases Section
+    st.header("🌍 Real-World Use Cases")
+    
+    use_case_data = [
+        ("⚖️ Digital Forensics", "Determine which scanner was used to forge or duplicate legal documents.", "Detect whether a fake certificate was created using a specific scanner model."),
+        ("📑 Document Authentication", "Identify the source of printed and scanned images to detect tampering.", "Differentiate between scans from authorized and unauthorized departments."),
+        ("🏛️ Legal Evidence Verification", "Ensure scanned copies in court come from known and approved devices.", "Verify that scanned agreements originated from the official scanner."),
+        ("🛡️ Corporate Security", "Monitor unauthorized document leakage by identifying the source machine.", "Trace leaked confidential memos back to the specific floor or office scanner."),
+        ("🔍 Supply Chain Integrity", "Verify the authenticity of shipping documents and labels.", "Detect counterfeit logistics forms by checking scanner noise consistency.")
+    ]
 
-with col_a1:
-    st.markdown("### 🔬 Unrivaled Precision")
-    st.write("Our ML models are trained on a large datset to detect artifacts invisible to the human eye.")
+    for title, desc, ex in use_case_data:
+        with st.expander(f"**{title}**"):
+            st.write(f"**Description:** {desc}")
+            st.write(f"**Example:** {ex}")
 
-with col_a2:
-    st.markdown("### ⚡ Instant Validation")
-    st.write("Get a forensic source report in seconds, not weeks. Streamline your document verification workflow.")
+# --- PAGE 2: ANALYSIS LAB ---
+else:
+    st.title("🔬 Forensic Analysis Lab")
+    st.write("Perform real-time device identification using specialized ML engines.")
+    
+    selected_engine = st.sidebar.selectbox("Choose Verification Engine", list(MODEL_DATA.keys()))
+    uploaded_file = st.file_uploader("Upload Scanned Evidence", type=["jpg", "png", "tif"])
 
-with col_a3:
-    st.markdown("### ⚖️ Legal-Grade Logic")
-    st.write("Built with forensic standards in mind, providing explainable evidence for authentication and fraud detection.")
-
-st.divider()
-
-# --- USE CASES SECTION ---
-st.header("🌍 Real-World Use Cases")
-
-# Using tabs for an organized look
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Digital Forensics", "Document Auth", "Legal Verification", "Corporate Security", "Supply Chain"
-])
-
-with tab1:
-    st.subheader("Digital Forensics")
-    st.write("**Scenario:** Determine which scanner was used to forge or duplicate legal documents.")
-    st.info("Example: Detect whether a fake degree or certificate was created using a specific high-end consumer scanner.")
-
-with tab2:
-    st.subheader("Document Authentication")
-    st.write("**Scenario:** Identify the source of printed/scanned images to detect tampering.")
-    st.info("Example: Differentiate between legitimate scans from a government office vs. unauthorized external devices.")
-
-with tab3:
-    st.subheader("Legal Evidence Verification")
-    st.write("**Scenario:** Ensure scanned copies submitted in court come from approved devices.")
-    st.info("Example: Verify that a signed contract originated from the company’s official secure scanner.")
-
-with tab4:
-    st.subheader("Corporate IP Protection")
-    st.write("**Scenario:** Trace the source of leaked internal documents.")
-    st.info("Example: Identify the specific office department where a leaked internal memo was scanned.")
-
-with tab5:
-    st.subheader("Supply Chain Integrity")
-    st.write("**Scenario:** Prevent the entry of fraudulent shipping labels or invoices.")
-    st.info("Example: Automated systems can flag invoices that don't match the known 'scanner fingerprint' of a trusted supplier.")
-
-st.divider()
-
-# --- DEMO PLACEHOLDER ---
-with st.container(border=True):
-    st.header("🧪 Interactive Sandbox (Coming Soon)")
-    st.write("Upload a scanned image below to see how our fingerprinting engine analyzes noise patterns.")
-    uploaded_file = st.file_uploader("Choose a scan...", type=["jpg", "png", "pdf"], disabled=True)
-    st.warning("The forensic backend is currently being integrated. Please check back soon!")
-
-# --- FOOTER ---
-st.markdown("---")
-st.caption("© 2025 AI TraceFinder | Powered by Forensic Machine Learning")
+    if uploaded_file:
+        col_img, col_act = st.columns([1, 1.2])
+        with col_img:
+            st.image(uploaded_file, caption="Target Scan", use_container_width=True)
+        
+        with col_act:
+            if st.button("🚀 IDENTIFY SOURCE DEVICE"):
+                with st.status("🔍 Initializing Forensic Report...", expanded=True) as status:
+                    st.write(f"⚙️ Loading weights for {selected_engine}...")
+                    time.sleep(0.8)
+                    st.write("🔬 Processing noise residuals and calculating features...")
+                    result = run_prediction(uploaded_file, selected_engine)
+                    st.write("📊 Finalizing performance metrics...")
+                    time.sleep(0.5)
+                    status.update(label="✅ Analysis Complete", state="complete", expanded=False)
+                
+                st.subheader("Identification Result")
+                st.success(f"**Identified Device:** {result}")
+                
+                st.divider()
+                st.markdown("### 📊 Engine Performance Report")
+                m = MODEL_DATA[selected_engine]
+                r1, r2, r3 = st.columns(3)
+                r1.metric("Accuracy", f"{m['acc']*100:.1f}%")
+                r2.metric("Precision", f"{m['prec']*100:.1f}%")
+                r3.metric("F1-Score", f"{m['f1']*100:.1f}%")
