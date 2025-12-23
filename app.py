@@ -1,6 +1,5 @@
 import streamlit as st
 import torch
-import torch.nn.functional as F
 from torchvision import transforms
 import joblib
 import numpy as np
@@ -23,12 +22,17 @@ from scr.baseline.preprocess_combined import load_original, compute_metadata_fea
 # --- 2. CONFIGURATION & STYLING ---
 st.set_page_config(page_title="AI TraceFinder Pro", layout="wide", page_icon="🔍")
 
-# Pathing configuration
 MODEL_DATA = {
     "SVM (Baseline)": {"acc": 0.88, "prec": 0.86, "f1": 0.85, "path": get_abs_path("models/baseline/svm.joblib")},
     "Random Forest": {"acc": 0.91, "prec": 0.90, "f1": 0.89, "path": get_abs_path("models/baseline/random_forest.joblib")},
     "Simple CNN": {"acc": 0.96, "prec": 0.95, "f1": 0.96, "path": get_abs_path("models/cnn_model.pth")} 
 }
+
+TRAINING_RESULTS = [
+    {"Model": "SVM (Baseline)", "Training Accuracy": "39.0%", "Status": "Validated"},
+    {"Model": "Random Forest", "Training Accuracy": "41.0%", "Status": "Validated"},
+    {"Model": "Simple CNN", "Training Accuracy": "63.38%", "Status": "Optimized"}
+]
 
 # --- 3. BACKEND LOGIC ---
 @st.cache_resource
@@ -75,48 +79,32 @@ def run_prediction(file, model_name):
     return result_name
 
 # --- 4. NAVIGATION ---
-st.sidebar.title("🔍 Navigation")
-page = st.sidebar.radio("Go to", ["🏛️ Project Home", "🔬 Analysis Lab"])
+st.sidebar.title("🔍 Forensic Suite")
+page = st.sidebar.radio("Navigate To", ["🏛️ Project Home", "📊 Model Evaluation", "🔬 Analysis Lab"])
 
-# --- PAGE 1: PROFESSIONAL LANDING PAGE ---
+# --- PAGE 1: PROJECT HOME ---
 if page == "🏛️ Project Home":
-    # Hero Section
     st.markdown("<h1 style='text-align: center; color: #1E3A8A; font-size: 3rem;'>AI TRACEFINDER PRO</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; font-size: 1.2rem; color: #555;'>Detecting Digital Fingerprints: Deep Learning for Scanner Forensic Identification</p>", unsafe_allow_html=True)
-    st.image("https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2000", use_container_width=True)
+    st.image("https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2000", width="stretch")
     
     st.divider()
-
-    # Introduction Section
     st.header("🏢 Project Overview")
     st.write("""
     Every scanner leaves behind a unique, invisible digital signature called **Photo Response Non-Uniformity (PRNU)**. 
-    Even identical models have microscopic variations in their sensors. **AI TraceFinder** leverages 
-    Convolutional Neural Networks (CNNs) and advanced machine learning to analyze these noise residuals, 
+    **AI TraceFinder** leverages Convolutional Neural Networks (CNNs) and advanced machine learning to analyze these noise residuals, 
     allowing forensic experts to pinpoint the exact device used to scan any document.
     """)
 
-    # Advantages Section
-    st.header("🛡️ Key Advantages")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.info("**Microscopic Precision**\nAnalyzes pixel-level noise invisible to the human eye.")
-    with col2:
-        st.info("**Multi-Engine Support**\nCombines CNN power with high-speed SVM and Random Forest baselines.")
-    with col3:
-        st.info("**Forensic Integrity**\nEnsures a verifiable chain of custody for digital evidence.")
-
-    st.divider()
-
-    # Use Cases Section
     st.header("🌍 Real-World Use Cases")
     
+    # RESTORED ALL 5 USE CASES
     use_case_data = [
         ("⚖️ Digital Forensics", "Determine which scanner was used to forge or duplicate legal documents.", "Detect whether a fake certificate was created using a specific scanner model."),
-        ("📑 Document Authentication", "Identify the source of printed and scanned images to detect tampering.", "Differentiate between scans from authorized and unauthorized departments."),
-        ("🏛️ Legal Evidence Verification", "Ensure scanned copies in court come from known and approved devices.", "Verify that scanned agreements originated from the official scanner."),
-        ("🛡️ Corporate Security", "Monitor unauthorized document leakage by identifying the source machine.", "Trace leaked confidential memos back to the specific floor or office scanner."),
-        ("🔍 Supply Chain Integrity", "Verify the authenticity of shipping documents and labels.", "Detect counterfeit logistics forms by checking scanner noise consistency.")
+        ("📑 Document Authentication", "Identify the source of printed and scanned images to detect tampering or fraudulent claims.", "Differentiate between scans from authorized and unauthorized departments."),
+        ("🏛️ Legal Evidence Verification", "Ensure scanned copies submitted in court/legal matters came from known and approved devices.", "Verify that scanned agreements originated from the company’s official scanner."),
+        ("🛡️ Corporate Security", "Monitor unauthorized document leakage by identifying the source machine from digital noise.", "Trace leaked confidential memos back to the specific floor or office scanner."),
+        ("🔍 Supply Chain Integrity", "Verify the authenticity of shipping documents, invoices, and labels.", "Detect counterfeit logistics forms by checking scanner noise consistency.")
     ]
 
     for title, desc, ex in use_case_data:
@@ -124,27 +112,45 @@ if page == "🏛️ Project Home":
             st.write(f"**Description:** {desc}")
             st.write(f"**Example:** {ex}")
 
-# --- PAGE 2: ANALYSIS LAB ---
+# --- PAGE 2: MODEL EVALUATION ---
+elif page == "📊 Model Evaluation":
+    st.title("📊 Training Performance & Metrics")
+    st.subheader("📋 Training Accuracy Comparison")
+    st.table(TRAINING_RESULTS)
+    
+    st.divider()
+    st.subheader("🧩 Confusion Matrices")
+    c1, c2, c3 = st.columns(3)
+    matrices = [("SVM Matrix", "svm_cm.png", c1), ("RF Matrix", "rf_cm.png", c2), ("CNN Matrix", "cnn_cm.png", c3)]
+    
+    for title, filename, col in matrices:
+        path = get_abs_path(f"results/{filename}")
+        with col:
+            st.markdown(f"**{title}**")
+            if os.path.exists(path):
+                st.image(path, width="stretch")
+            else:
+                st.error(f"Missing: {filename}")
+
+# --- PAGE 3: ANALYSIS LAB ---
 else:
     st.title("🔬 Forensic Analysis Lab")
-    st.write("Perform real-time device identification using specialized ML engines.")
-    
     selected_engine = st.sidebar.selectbox("Choose Verification Engine", list(MODEL_DATA.keys()))
     uploaded_file = st.file_uploader("Upload Scanned Evidence", type=["jpg", "png", "tif"])
 
     if uploaded_file:
         col_img, col_act = st.columns([1, 1.2])
         with col_img:
-            st.image(uploaded_file, caption="Target Scan", use_container_width=True)
+            st.image(uploaded_file, caption="Target Scan", width="stretch")
         
         with col_act:
             if st.button("🚀 IDENTIFY SOURCE DEVICE"):
                 with st.status("🔍 Initializing Forensic Report...", expanded=True) as status:
                     st.write(f"⚙️ Loading weights for {selected_engine}...")
-                    time.sleep(0.8)
-                    st.write("🔬 Processing noise residuals and calculating features...")
+                    time.sleep(0.5)
+                    st.write("🔬 Processing noise residuals...")
                     result = run_prediction(uploaded_file, selected_engine)
-                    st.write("📊 Finalizing performance metrics...")
+                    st.write("📊 Finalizing metrics...")
                     time.sleep(0.5)
                     status.update(label="✅ Analysis Complete", state="complete", expanded=False)
                 
