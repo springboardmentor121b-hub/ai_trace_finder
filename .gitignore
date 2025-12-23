@@ -1,0 +1,22 @@
+# Unwanted
+__pycache__/
+
+# Results and outputs
+processed_data/
+patches/
+
+# Logs
+*.log
+
+# Dataset
+data/
+
+# CSV
+*.csv
+
+
+
+*.pkl
+
+*.tif
+*.txt
