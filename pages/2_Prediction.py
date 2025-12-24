@@ -16,7 +16,7 @@ from scipy.stats import skew, kurtosis, entropy
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(BASE_DIR, "src", "cnn_model"))
 
-from model import SimpleCNN
+from models import SimpleCNN
 
 IMG_SIZE = 128
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
