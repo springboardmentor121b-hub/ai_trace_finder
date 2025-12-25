@@ -1,0 +1,9 @@
+venv/
+Data_Set/
+processed_data/
+models/
+*.pkl
+*.pth
+*.zip
+__pycache__/
+
