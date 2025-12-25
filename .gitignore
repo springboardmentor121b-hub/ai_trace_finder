@@ -6,4 +6,5 @@ models/
 *.pth
 *.zip
 __pycache__/
+ai_trace_finder/
 
