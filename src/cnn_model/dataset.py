@@ -6,14 +6,18 @@ from torch.utils.data import DataLoader, ConcatDataset, random_split
 def get_dataloaders(data_root="data", batch_size=32, img_size=128, val_split=0.1, test_split=0.1):
     """
     Creates DataLoaders for train, validation, and test sets.
-    Combines 'Official' and 'Wikipedia' datasets.
+    Combines 'official' and 'Wikipedia' datasets.
     """
     
     # Define transformations
+    # CRITICAL CHANGE: Use RandomCrop instead of Resize to preserve sensor noise patterns.
+    # Resizing destroys the high-frequency artifacts needed for source identification.
     transform = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
+        transforms.RandomCrop((img_size, img_size), pad_if_needed=True),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5,0.5,0.5], std=[0.5,0.5,0.5]) # Assuming grayscale or normalizing per channel
+        transforms.Normalize(mean=[0.5,0.5,0.5], std=[0.5,0.5,0.5]) 
     ])
     
     datasets_list = []
@@ -21,7 +25,7 @@ def get_dataloaders(data_root="data", batch_size=32, img_size=128, val_split=0.1
     # 1. Official Dataset
     official_dir = os.path.join(data_root, "Official")
     if os.path.exists(official_dir):
-        print(f"Found Official dataset at {official_dir}")
+        print(f"Found official dataset at {official_dir}")
         ds_official = datasets.ImageFolder(root=official_dir, transform=transform)
         datasets_list.append(ds_official)
     else:
@@ -37,8 +41,16 @@ def get_dataloaders(data_root="data", batch_size=32, img_size=128, val_split=0.1
         print(f"Warning: Wikipedia dataset not found at {wiki_dir}")
 
     if not datasets_list:
-        raise ValueError("No datasets found! Please check data structure.")
+        raise ValueError("No datasets found! Please check Data_Set structure.")
     
+    # Safety Check: Ensure classes match if multiple datasets exist
+    if len(datasets_list) > 1:
+        classes_0 = datasets_list[0].classes
+        for i in range(1, len(datasets_list)):
+            if datasets_list[i].classes != classes_0:
+                raise ValueError(f"Class mismatch between datasets! {classes_0} vs {datasets_list[i].classes}")
+        print("Class consistency check passed.")
+
     full_dataset = ConcatDataset(datasets_list)
     
     # Split
@@ -55,23 +67,10 @@ def get_dataloaders(data_root="data", batch_size=32, img_size=128, val_split=0.1
     print(f"Total images: {total_size}")
     print(f"Train: {len(train_dataset)}, Val: {len(val_dataset)}, Test: {len(test_dataset)}")
     
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
-    # Get classes from the first dataset found
     classes = datasets_list[0].classes
     
     return train_loader, val_loader, test_loader, classes
-
-if __name__ == "__main__":
-    # Calculate project root relative to this script
-    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-    
-    try:
-        train_loader, val_loader, test_loader, classes = get_dataloaders(data_root=DATA_DIR)
-        print(f"Classes found: {classes}")
-        print("Data loading test successful!")
-    except Exception as e:
-        print(f"Error: {e}")

@@ -9,10 +9,8 @@ import joblib
 import os
 
 # Paths
-# Calculate project root relative to this script (src/baseline/train_baseline.py -> ../../..)
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CSV_PATH = os.path.join(PROJECT_ROOT, "processed_data", "combined_metadata.csv")
-MODEL_DIR = os.path.join(PROJECT_ROOT, "models", "baseline")
+CSV_PATH = "processed_data/combined_metadata.csv"
+MODEL_DIR = "models/baseline"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 def train_baseline_models():
@@ -54,9 +52,23 @@ def train_baseline_models():
 
     # Train/Test Split
     # Stratify by target to ensure balanced classes in split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
+    # We split the whole dataframe so we can save the test set for later evaluation
+    df['encoded_label'] = y_encoded
+    train_df, test_df = train_test_split(
+        df, test_size=0.2, random_state=42, stratify=df['encoded_label']
     )
+    
+    # Save test split for independent evaluation
+    test_csv_path = "processed_data/test_split.csv"
+    test_df.to_csv(test_csv_path, index=False)
+    print(f"Test split saved to {test_csv_path}")
+
+    # Prepare X and y for training
+    X_train = train_df[feature_cols]
+    y_train = train_df['encoded_label']
+    
+    X_test = test_df[feature_cols]
+    y_test = test_df['encoded_label']
 
     # Scaling
     scaler = StandardScaler()

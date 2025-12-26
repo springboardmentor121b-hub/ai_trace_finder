@@ -1,76 +1,75 @@
+
+import os
 import pandas as pd
 import joblib
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
-import os
+
 
 # Paths
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CSV_PATH = os.path.join(PROJECT_ROOT, "processed_data", "combined_metadata.csv")
-MODEL_DIR = os.path.join(PROJECT_ROOT, "models", "baseline")
-RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
+CSV_PATH      = "processed_data/test_split.csv"
+MODEL_DIR     = "models/baseline"
+SCALER_PATH   = os.path.join(MODEL_DIR, "scaler.joblib")
+ENCODER_PATH  = os.path.join(MODEL_DIR, "label_encoder.joblib")
 
-def evaluate_model(model_filename, name):
-    model_path = os.path.join(MODEL_DIR, model_filename)
-    scaler_path = os.path.join(MODEL_DIR, "scaler.joblib")
-    label_encoder_path = os.path.join(MODEL_DIR, "label_encoder.joblib")
 
-    print(f"Loading data from {CSV_PATH}...")
-    try:
-        df = pd.read_csv(CSV_PATH)
-    except FileNotFoundError:
-        print(f"Error: {CSV_PATH} not found.")
-        return
+def evaluate_model(model_path, name, save_dir="results"):
+    # 1) Load dataset
+    df = pd.read_csv(CSV_PATH)
 
-    # Features and Target
-    drop_cols = ["file_name", "main_class", "resolution", "class_label"]
+    # Same feature selection as training
+    # Note: 'encoded_label' was added during training split saving, so we must drop it too.
+    drop_cols = ["file_name", "dataset_source", "main_class", "resolution", "class_label", "encoded_label"]
     feature_cols = [c for c in df.columns if c not in drop_cols]
-    
+
     X = df[feature_cols]
-    y = df["class_label"]
+    y_str = df["class_label"]          # original string labels
 
-    # Load scaler + model + label encoder
-    print(f"Loading resources from {MODEL_DIR}...")
-    try:
-        scaler = joblib.load(scaler_path)
-        model = joblib.load(model_path)
-        le = joblib.load(label_encoder_path)
-    except FileNotFoundError as e:
-        print(f"Error loading models: {e}")
-        return
+    # 2) Load scaler, label encoder and model
+    scaler = joblib.load(SCALER_PATH)
+    le = joblib.load(ENCODER_PATH)
+    model = joblib.load(model_path)
 
-    # Transform features
+    # Encode y using SAME encoder as training
+    y_true = le.transform(y_str)
+
+    # 3) Transform features and predict
     X_scaled = scaler.transform(X)
-    
-    # Encode target for evaluation
-    y_encoded = le.transform(y)
-    
     y_pred = model.predict(X_scaled)
 
-    # Print report
+    # 4) Classification report (decode back to class names)
+    target_names = le.classes_
     print(f"\n=== {name} Evaluation ===")
-    print(classification_report(y_encoded, y_pred, target_names=le.classes_))
+    print(classification_report(y_true, y_pred, target_names=target_names))
 
-    # Confusion Matrix
-    cm = confusion_matrix(y_encoded, y_pred)
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt="d",
-                xticklabels=le.classes_,
-                yticklabels=le.classes_,
-                cmap="Blues")
+    # 5) Confusion matrix (in encoded space, but show class names)
+    cm = confusion_matrix(y_true, y_pred)
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        xticklabels=target_names,
+        yticklabels=target_names,
+        cmap="Blues"
+    )
     plt.title(f"{name} Confusion Matrix")
     plt.xlabel("Predicted")
     plt.ylabel("True")
 
-    # Ensure results directory exists
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    save_path = os.path.join(RESULTS_DIR, f"{name.replace(' ', '_')}_confusion_matrix.png")
-
-    # Save figure
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, f"{name.replace(' ', '_')}_confusion_matrix.png")
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    print(f" Confusion matrix saved to: {save_path}")
+    print(f"Confusion matrix image saved to: {save_path}")
+
+    plt.show()
+
 
 if __name__ == "__main__":
-    evaluate_model("random_forest.joblib", "Random Forest")
-    evaluate_model("svm.joblib", "SVM")
+    # Random Forest
+    evaluate_model(os.path.join(MODEL_DIR, "random_forest.joblib"), "Random Forest")
+
+    # SVM
+    evaluate_model(os.path.join(MODEL_DIR, "svm.joblib"), "SVM")

@@ -7,19 +7,13 @@ from tqdm import tqdm
 from dataset import get_dataloaders
 from model import SimpleCNN
 
-def train_model(epochs=10, batch_size=32, learning_rate=0.001, data_path=None):
+def train_model(epochs=10, batch_size=32, learning_rate=0.001, data_path="data"):
     
-    # Calculate project root relative to this script
-    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    
-    if data_path is None:
-        data_path = os.path.join(PROJECT_ROOT, "data")
-        
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
     # Load Data
-    print(f"Preparing data from {data_path}...")
+    print("Preparing data...")
     train_loader, val_loader, test_loader, classes = get_dataloaders(data_root=data_path, batch_size=batch_size)
     num_classes = len(classes)
     print(f"Number of classes: {num_classes}")
@@ -31,16 +25,18 @@ def train_model(epochs=10, batch_size=32, learning_rate=0.001, data_path=None):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
+    # Learning Rate Scheduler
+    # Reduce LR by factor of 0.1 if validation loss doesn't improve for 3 epochs
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3, verbose=True)
+    
     # Training Loop
     best_val_acc = 0.0
-    
-    # Save path
-    model_dir = os.path.join(PROJECT_ROOT, "models", "cnn")
-    os.makedirs(model_dir, exist_ok=True)
-    save_path = os.path.join(model_dir, "cnn_model.pth")
+    save_path = "models/cnn_model.pth"
+    os.makedirs("models", exist_ok=True)
     
     for epoch in range(epochs):
-        print(f"\nEpoch {epoch+1}/{epochs}")
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"\nEpoch {epoch+1}/{epochs} | LR: {current_lr:.6f}")
         model.train()
         running_loss = 0.0
         correct = 0
@@ -88,6 +84,9 @@ def train_model(epochs=10, batch_size=32, learning_rate=0.001, data_path=None):
         val_acc = 100 * val_correct / val_total
         avg_val_loss = val_loss / len(val_loader)
         print(f"Val Loss: {avg_val_loss:.4f}, Val Acc: {val_acc:.2f}%")
+        
+        # Step the scheduler
+        scheduler.step(avg_val_loss)
         
         # Save best model
         if val_acc > best_val_acc:
