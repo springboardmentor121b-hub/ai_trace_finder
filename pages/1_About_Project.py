@@ -1,63 +1,66 @@
 import streamlit as st
 
-st.title("About Project")
+st.markdown("""
+<style>
+.card {
+    background-color: #EEF1FF;
+    padding: 1.8rem;
+    border-radius: 18px;
+    box-shadow: 0px 12px 30px rgba(90,100,180,0.12);
+    margin-bottom: 1.6rem;
+}
+.badge {
+    background-color: #6C7BFF;
+    color: white;
+    padding: 5px 14px;
+    border-radius: 18px;
+    font-size: 14px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 st.markdown("""
 <div class="card">
-<h3>Project Overview</h3>
+<h2>📌 About TraceFinder</h2>
+<span class="badge">Hybrid CNN Core</span>
 <p>
-TraceFinder is a machine learning–based system designed to identify the source
-scanner of a scanned image by analyzing scanner-specific artifacts.
-The system integrates deep learning and classical machine learning models
-to achieve reliable scanner attribution.
+TraceFinder is a machine learning–based forensic system that identifies
+the source scanner of a scanned image by analyzing scanner-specific artifacts.
+The system is centered around a <b>Hybrid CNN architecture</b> that combines
+deep learning with handcrafted forensic features.
 </p>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div class="card">
-<h3>Project Statement</h3>
+<h3>🎯 Project Objective</h3>
 <p>
-The objective of TraceFinder is to identify the source scanner device used to scan
-a document or image by analyzing noise patterns, texture variations, and
-frequency-domain characteristics. Each scanner leaves unique traces that can be
-learned using machine learning and deep learning techniques.
+The goal is to identify the scanner device used to scan a document by learning
+noise residuals, frequency patterns, and texture characteristics that are
+unique to each scanner model.
 </p>
 </div>
 """, unsafe_allow_html=True)
 
+with st.expander("🧠 Why Hybrid CNN?"):
+    st.markdown("""
+    <ul>
+    <li>Combines PRNU-based noise learning with CNN features</li>
+    <li>Improves robustness over standalone CNN or ML models</li>
+    <li>Better generalization across scanners and resolutions</li>
+    </ul>
+    """)
+
 st.markdown("""
 <div class="card">
-<h3>Use Cases</h3>
+<h3>⚙️ System Modules</h3>
 <ul>
-<li><b>Digital Forensics:</b> Identifying scanners used in forged or duplicated documents.</li>
-<li><b>Document Authentication:</b> Verifying whether scanned copies originate from authorized devices.</li>
-<li><b>Legal Evidence Verification:</b> Validating scanned documents submitted as legal evidence.</li>
+<li>Data Collection and Labeling</li>
+<li>Image Preprocessing and Noise Residual Extraction</li>
+<li>Hybrid CNN Feature Learning</li>
+<li>Classical ML Comparison (SVM, Random Forest)</li>
+<li>Interactive Prediction Interface</li>
 </ul>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="card">
-<h3>System Modules</h3>
-<ul>
-<li><b>Data Collection and Labeling:</b> Collection of scanned images from multiple scanner devices.</li>
-<li><b>Image Preprocessing:</b> Resizing, denoising, grayscale conversion, and normalization.</li>
-<li><b>Feature Extraction:</b> Noise residuals, FFT-based frequency features, and edge descriptors.</li>
-<li><b>Model Training:</b> CNN for deep feature learning and SVM/Random Forest for handcrafted features.</li>
-<li><b>Prediction Module:</b> Upload an image and identify the probable scanner source.</li>
-</ul>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="card">
-<h3>Dataset</h3>
-<p>
-The dataset consists of scanned document images collected from official sources
-and online repositories. All images are resized to 128 × 128 resolution and
-normalized before training. The dataset is divided into training, validation,
-and testing subsets to ensure reliable evaluation.
-</p>
 </div>
 """, unsafe_allow_html=True)
