@@ -1,0 +1,28 @@
+============================================================
+EDA SUMMARY - Wikipedia Dataset
+============================================================
+
+Dataset Location: C:\Users\ASUS\Desktop\myproject\codes\eda\..\..\data\WikiPedia
+Number of Classes: 11
+Total Images: 2368
+
+Class Distribution:
+----------------------------------------
+  Canon120-1: 216 images
+  Canon120-2: 216 images
+  Canon220: 216 images
+  Canon9000-1: 216 images
+  Canon9000-2: 207 images
+  EpsonV370-1: 216 images
+  EpsonV370-2: 217 images
+  EpsonV39-1: 216 images
+  EpsonV39-2: 216 images
+  EpsonV550: 216 images
+  HP: 216 images
+
+Imbalance Ratio: 1.05x
+
+Image Statistics (RGB):
+----------------------------------------
+  Mean: [0.9559, 0.9534, 0.9468]
+  Std:  [0.0943, 0.1002, 0.1051]

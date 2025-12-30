@@ -1,0 +1,28 @@
+============================================================
+EDA SUMMARY - Official Dataset
+============================================================
+
+Dataset Location: C:\Users\ASUS\Desktop\myproject\codes\eda\..\..\data\Official
+Number of Classes: 11
+Total Images: 1939
+
+Class Distribution:
+----------------------------------------
+  Canon120-1: 200 images
+  Canon120-2: 200 images
+  Canon220: 200 images
+  Canon9000-1: 200 images
+  Canon9000-2: 200 images
+  EpsonV370-1: 200 images
+  EpsonV370-2: 200 images
+  EpsonV39-1: 200 images
+  EpsonV39-2: 200 images
+  EpsonV550: 95 images
+  HP: 44 images
+
+Imbalance Ratio: 4.55x
+
+Image Statistics (RGB):
+----------------------------------------
+  Mean: [0.9765, 0.9757, 0.9704]
+  Std:  [0.0592, 0.0584, 0.0595]
