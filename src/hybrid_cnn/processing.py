@@ -1,3 +1,10 @@
+"""
+processing.py
+Data loading and preprocessing functions.
+- Handles `Flatfield`, `official`, `Wikipedia` datasets.
+- Produces: residual images (256x256x1) and saves them as pickle files.
+"""
+
 import os
 import pickle
 from tqdm import tqdm
@@ -11,7 +18,7 @@ from scipy.signal import wiener as scipy_wiener
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-
+# Global Parameters
 IMG_SIZE = (256, 256)
 DENOISE_METHOD = "wavelet"
 BATCH_SIZE = 64
@@ -19,62 +26,48 @@ MAX_WORKERS = 8
 
 print(f"Dataset Processing: Use GPU? {USE_GPU}")
 
-
-
 def to_gray(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
-
 
 def resize_to(img, size=IMG_SIZE):
     return cv2.resize(img, size, interpolation=cv2.INTER_AREA)
 
-
 def normalize_img(img):
     return img.astype(np.float32) / 255.0
-
 
 def denoise_wavelet_img_cpu(img):
     """Wavelet denoising (Haar) on CPU using PyWavelets."""
     coeffs = pywt.dwt2(img, 'haar')
     cA, (cH, cV, cD) = coeffs
-    cH[:] = 0
-    cV[:] = 0
-    cD[:] = 0
+    cH[:] = 0; cV[:] = 0; cD[:] = 0
     return pywt.idwt2((cA, (cH, cV, cD)), 'haar')
-
 
 def preprocess_image_cpu(fpath, method=DENOISE_METHOD):
     """Process single image on CPU."""
     img = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
     if img is None:
         return None
-
     img = to_gray(img)
     img = resize_to(img)
     img = normalize_img(img)
-
     # Denoising
     if method == "wiener":
-        den = scipy_wiener(img, mysize=(5, 5))
+        den = scipy_wiener(img, mysize=(5,5))
     elif method == "wavelet":
         den = denoise_wavelet_img_cpu(img)
     else:
         raise ValueError(f"Unknown denoise method: {method}")
-
+    
     # Residual
     res = (img - den).astype(np.float32)
     return res
 
-
-
 def process_folder(base_dir, use_dpi_subfolders=True):
     """
     Process all images under a folder.
-    Returns:
-        residuals[scanner][dpi] = list_of_residuals
+    Returns nested dict: residuals[scanner][dpi] = list_of_residuals
     """
     residuals_dict = {}
-
     if not os.path.exists(base_dir):
         print(f"Error: {base_dir} does not exist!")
         return {}
@@ -89,105 +82,79 @@ def process_folder(base_dir, use_dpi_subfolders=True):
         residuals_dict[scanner] = {}
 
         if use_dpi_subfolders:
-            # Official / Wikipedia datasets
             for dpi in os.listdir(scanner_dir):
                 dpi_dir = os.path.join(scanner_dir, dpi)
                 if not os.path.isdir(dpi_dir):
                     continue
-
-                files = [
-                    os.path.join(dpi_dir, f)
-                    for f in os.listdir(dpi_dir)
-                    if f.lower().endswith((".tif", ".tiff", ".png", ".jpg", ".jpeg"))
-                ]
-
+                files = [os.path.join(dpi_dir, f) for f in os.listdir(dpi_dir)
+                         if f.lower().endswith((".tif", ".tiff", ".png", ".jpg", ".jpeg"))]
+                
+                # Process files
                 residuals_dict[scanner][dpi] = run_processing(files)
         else:
-            # Flatfield dataset (no DPI subfolders)
-            files = [
-                os.path.join(scanner_dir, f)
-                for f in os.listdir(scanner_dir)
-                if f.lower().endswith((".tif", ".tiff", ".png", ".jpg", ".jpeg"))
-            ]
-
+            # Flatfield dataset: no dpi subfolders
+            files = [os.path.join(scanner_dir, f) for f in os.listdir(scanner_dir)
+                     if f.lower().endswith((".tif", ".tiff", ".png", ".jpg", ".jpeg"))]
             residuals_dict[scanner] = run_processing(files)
 
     return residuals_dict
 
-
 def run_processing(file_list):
-    """Dispatch to GPU batch or CPU thread pool."""
+    """Dispatches to GPU batch or CPU pool."""
     if not file_list:
         return []
-
+        
     all_residuals = []
-
+    
     if USE_GPU:
+        # Batch chunks
         for i in range(0, len(file_list), BATCH_SIZE):
-            chunk = file_list[i:i + BATCH_SIZE]
+            chunk = file_list[i : i + BATCH_SIZE]
             res_chunk = process_batch_gpu(chunk)
             all_residuals.extend(res_chunk)
     else:
+        # Fallback to ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = [executor.submit(preprocess_image_cpu, f) for f in file_list]
             for fut in as_completed(futures):
                 res = fut.result()
                 if res is not None:
                     all_residuals.append(res)
-
+                    
     return all_residuals
 
-
 def save_pickle(obj, path):
+    # Ensure dir exists
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
         pickle.dump(obj, f)
     print(f"Saved residuals to {path}")
 
 
-
+# Main Execution
 if __name__ == "__main__":
+    BASE_DIR = r"D:\Project\TraceFinder\data\Train"
 
-    
-    BASE_DIR = r"D:\Project\TraceFinder\data"   
-
-    
-    datasets = ["Official", "Wikipedia"]        
+    # Official + Wikipedia
+    datasets = ["Official", "Wikipedia"]
     official_wiki_residuals = {}
 
     for dataset in datasets:
         print(f"\nProcessing {dataset} dataset...")
         dataset_dir = os.path.join(BASE_DIR, dataset)
-        official_wiki_residuals[dataset] = process_folder(
-            dataset_dir,
-            use_dpi_subfolders=True
-        )
+        official_wiki_residuals[dataset] = process_folder(dataset_dir, use_dpi_subfolders=True)
 
-    # OUTPUT PATH for Official + Wikipedia residuals
-    
-    OUT_PATH = r"D:\Project\TraceFinder\models\hybrid_cnn\official_wiki_residuals.pkl"   ### ← WRITE PATH HERE
+    OUT_PATH = os.path.join(BASE_DIR, "../results/hybrid_cnn/official_wiki_residuals.pkl")
     save_pickle(official_wiki_residuals, OUT_PATH)
 
-
-    # Flatfield dataset
-   
+    # Flatfield dataset (no dpi subfolders)
     print("\nProcessing Flatfield dataset...")
-
-    # FULL PATH to Flatfield folder
-    flatfield_dir = r"D:\Project\TraceFinder\data\Flatfield"   ### ← WRITE PATH HERE
-    flatfield_residuals = process_folder(
-        flatfield_dir,
-        use_dpi_subfolders=False
-    )
-
-    #  OUTPUT PATH for Flatfield residuals
-    OUT_PATH_FLAT = r"D:\Project\TraceFinder\models\hybrid_cnn\flatfield_residuals.pkl"  ### ← WRITE PATH HERE
+    flatfield_dir = os.path.join(BASE_DIR, "Flatfield")
+    flatfield_residuals = process_folder(flatfield_dir, use_dpi_subfolders=False)
+    OUT_PATH_FLAT = os.path.join(flatfield_dir, "../../results/hybrid_cnn/flatfield_residuals.pkl")
     save_pickle(flatfield_residuals, OUT_PATH_FLAT)
 
-   
+    # Summary
     total_scanners = len(flatfield_residuals)
-    total_images = sum(
-        [len(v) for v in flatfield_residuals.values() if isinstance(v, list)]
-    )
-
+    total_images = sum([len(v) for v in flatfield_residuals.values() if isinstance(v, list)])
     print(f"\nDone. Flatfield: {total_scanners} scanners, ~{total_images} images processed.")

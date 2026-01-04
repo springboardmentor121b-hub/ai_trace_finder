@@ -8,7 +8,7 @@ import csv
 from utils import process_batch_gpu, batch_corr_gpu, extract_enhanced_features, to_gray, resize_to, normalize_img
 
 # Paths
-BASE_DIR = "Data_Set"
+BASE_DIR = r"D:\Project\TraceFinder\data"
 ART_DIR = "results/hybrid_cnn"
 FP_PATH = os.path.join(ART_DIR, "scanner_fingerprints.pkl")
 ORDER_NPY = os.path.join(ART_DIR, "fp_keys.npy")
