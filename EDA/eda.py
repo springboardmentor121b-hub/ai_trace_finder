@@ -1,106 +1,59 @@
 import os
-import cv2
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from skimage.restoration import denoise_wavelet
-from skimage.filters import sobel
+CSV_PATH = "processed_data/combined_features.csv"
+OUT_DIR = "EDA"
 
-# paths
-DATA_ROOT = r"Data"
-CSV_PATH = r"processed_data\combined_features.csv"
+os.makedirs(OUT_DIR, exist_ok=True)
 
-# classes and extensions
-CLASSES = ["Official", "Wikipedia"]
-VALID_EXT = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp")
+# -------------------------
+# LOAD CSV
+# -------------------------
+if not os.path.exists(CSV_PATH):
+    raise FileNotFoundError(f"CSV not found at: {CSV_PATH}")
 
-# load csv
+print("Loading CSV for EDA...")
 df = pd.read_csv(CSV_PATH)
 
-# class distribution
-plt.figure()
-df["dataset_source"].value_counts().plot(kind="bar")
+print("Total samples:", len(df))
+print("Columns:", df.columns.tolist())
+
+# -------------------------
+# CLASS DISTRIBUTION
+# -------------------------
+plt.figure(figsize=(6,4))
+df["main_class"].value_counts().plot(kind="bar")
 plt.title("Class Distribution")
-plt.xlabel("Class")
-plt.ylabel("Samples")
-plt.show()
+plt.xlabel("Printer Class")
+plt.ylabel("Count")
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "class_distribution.png"))
+plt.close()
 
-# resolution distribution
-plt.figure()
-plt.scatter(df["width"], df["height"], alpha=0.4)
-plt.xlabel("Width")
-plt.ylabel("Height")
-plt.title("Resolution Distribution")
-plt.show()
-
-# mean vs std
-plt.figure()
-plt.scatter(df["mean_intensity"], df["std_intensity"], alpha=0.4)
+# -------------------------
+# MEAN INTENSITY
+# -------------------------
+plt.figure(figsize=(6,4))
+df["mean_intensity"].hist(bins=30)
+plt.title("Mean Intensity Distribution")
 plt.xlabel("Mean Intensity")
-plt.ylabel("Std Intensity")
-plt.title("Mean vs Std Intensity")
-plt.show()
-
-# load one valid image
-def load_sample(folder):
-   for f in os.listdir(folder):
-       if f.lower().endswith((".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp")):
-           path = os.path.join(folder, f)
-           img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-           if img is not None and isinstance(img, np.ndarray):
-               return img
-    # raise ValueError(f"No valid image found in {folder}")
-
-
-# sample images per class
-samples = {}
-
-plt.figure(figsize=(8, 4))
-for i, cls in enumerate(CLASSES):
-    img = load_sample(os.path.join(DATA_ROOT, cls))
-    samples[cls] = img
-    plt.subplot(1, 2, i + 1)
-    plt.imshow(img.astype(np.float32), cmap="gray")
-    plt.title(cls)
-    plt.axis("off")
-plt.show()
-
-# pixel histogram
-img = samples[CLASSES[0]]
-plt.figure()
-plt.hist(img.flatten(), bins=50)
-plt.xlabel("Intensity")
 plt.ylabel("Frequency")
-plt.title("Pixel Histogram")
-plt.show()
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "intensity.png"))
+plt.close()
 
-# noise residual
-denoised = denoise_wavelet(img, channel_axis=None, rescale_sigma=True)
-noise = img.astype(np.float32) - denoised.astype(np.float32)
+# -------------------------
+# RESOLUTION
+# -------------------------
+plt.figure(figsize=(6,4))
+df["resolution"].hist(bins=20)
+plt.title("Resolution Distribution")
+plt.xlabel("Resolution")
+plt.ylabel("Frequency")
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "resolution_distribution.png"))
+plt.close()
 
-# edge map
-edges = sobel(img)
-
-# visualization
-plt.figure(figsize=(9, 3))
-plt.subplot(1, 3, 1)
-plt.imshow(img, cmap="gray")
-plt.title("Original")
-plt.axis("off")
-
-plt.subplot(1, 3, 2)
-plt.imshow(noise, cmap="gray")
-plt.title("Noise")
-plt.axis("off")
-
-plt.subplot(1, 3, 3)
-plt.imshow(edges, cmap="gray")
-plt.title("Edges")
-plt.axis("off")
-plt.show()
-
-# summary
-print("Shape:", df.shape)
-print("Missing:\n", df.isnull().sum())
-print("Classes:\n", df["dataset_source"].value_counts())
+print("EDA completed successfully")
+print("EDA outputs saved in EDA/ folder")
