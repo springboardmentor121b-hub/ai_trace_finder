@@ -111,7 +111,7 @@ model.fit(
     [X_img_tr, X_feat_tr],
     y_tr,
     validation_data=([X_img_te, X_feat_te], y_te),
-    epochs=10,
+    epochs=30,
     batch_size=32
 )
 
