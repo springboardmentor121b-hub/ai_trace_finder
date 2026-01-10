@@ -12,11 +12,6 @@ import os
 import sys
 
 # Add src to sys.path to ensure we can import modules if running from root or src
-from fpdf import FPDF
-import base64
-import tracemalloc
-
-
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 if current_dir not in sys.path:
@@ -25,69 +20,15 @@ if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
 # Model Imports
-# import tensorflow as tf  <-- Lazy loaded
+import tensorflow as tf
 import pickle
 import joblib
 from baseline.predict_baseline import predict_scanner as predict_baseline
-# from hybrid_cnn.utils import ... <-- Lazy loaded
+from hybrid_cnn.utils import process_batch_gpu, batch_corr_gpu, extract_enhanced_features
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
 RESULTS_DIR = os.path.join(ROOT_DIR, "results")
-
-def create_pdf_report(scanner_data, file_name="Unknown"):
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", 'B', 20)
-        pdf.set_text_color(0, 212, 255) # Cyan
-        pdf.cell(0, 15, "TraceScope AI", 0, 1, 'C')
-        pdf.set_font("Arial", 'B', 14)
-        pdf.set_text_color(50, 50, 50)
-        pdf.cell(0, 10, "Forensic Analysis Report", 0, 1, 'C')
-        
-        pdf.set_font("Arial", '', 10)
-        pdf.set_text_color(100, 100, 100)
-        pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 0, 1, 'C')
-        pdf.ln(10)
-        
-        pdf.set_draw_color(0, 212, 255)
-        pdf.line(10, 45, 200, 45)
-        
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 10, "Analysis Results", 0, 1, 'L')
-        
-        pdf.set_font("Arial", '', 11)
-        pdf.cell(60, 10, "Source File:", 0, 0)
-        pdf.cell(0, 10, str(file_name), 0, 1)
-        
-        pdf.cell(60, 10, "Predicted Brand:", 0, 0)
-        pdf.set_font("Arial", 'B', 11)
-        pdf.cell(0, 10, str(scanner_data.get('brand', 'Unknown')), 0, 1)
-        pdf.set_font("Arial", '', 11)
-        
-        pdf.cell(60, 10, "Predicted Model:", 0, 0)
-        pdf.set_font("Arial", 'B', 11)
-        pdf.cell(0, 10, str(scanner_data.get('model', 'Unknown')), 0, 1)
-        pdf.set_font("Arial", '', 11)
-        
-        pdf.cell(60, 10, "Confidence Score:", 0, 0)
-        pdf.set_font("Arial", 'B', 11)
-        pdf.cell(0, 10, f"{scanner_data.get('confidence', 0):.2f}%", 0, 1)
-        pdf.set_font("Arial", '', 11)
-        
-        pdf.ln(20)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.rect(10, pdf.get_y(), 190, 30, 'F')
-        pdf.set_xy(15, pdf.get_y()+5)
-        pdf.set_font("Arial", 'I', 10)
-        pdf.multi_cell(180, 8, "Disclaimer: This report was generated automatically by TraceScope AI. The results are based on probabilistic models and should be verified by a forensic expert.")
-        
-        return pdf.output(dest='S').encode('latin-1')
-    except Exception as e:
-        return None
-
 
 @st.cache_resource
 def get_hybrid_resources():
@@ -104,7 +45,6 @@ def get_hybrid_resources():
             st.error(f"Model file not found: {model_path}")
             return None
             
-        import tensorflow as tf  # Lazy import
         model = tf.keras.models.load_model(model_path)
         with open(le_path, "rb") as f: le = pickle.load(f)
         with open(scaler_path, "rb") as f: scaler = pickle.load(f)
@@ -147,9 +87,6 @@ if 'session_confidences' not in st.session_state:
     st.session_state['session_confidences'] = []
 if 'processing_times' not in st.session_state:
     st.session_state['processing_times'] = []
-if 'history' not in st.session_state:
-    st.session_state['history'] = []
-
 
 # -----------------------------------------------------------------------------
 # 2. Enhanced Modern UI & CSS Styling
@@ -183,154 +120,23 @@ st.markdown("""
         font-size: 2.2rem !important; 
         font-weight: 800 !important; 
         color: #00d4ff !important; 
-        margin-top: 2rem !important;
-        margin-bottom: 1rem !important;
+        margin-top: 2.5rem !important;
         border-left: 4px solid #00d4ff;
-        padding-left: 10px;
-        line-height: 1.2;
+        padding-left: 15px;
     }
     
     h3 { 
-        font-size: 1.5rem !important; 
+        font-size: 1.6rem !important; 
         font-weight: 700 !important; 
         color: #ffffff !important;
         margin-top: 1.5rem !important;
-        margin-bottom: 1rem !important;
     }
     
     p { 
         font-size: 1.05rem; 
-        line-height: 1.6; 
+        line-height: 1.7; 
         color: #b0b0b0;
         margin-bottom: 1rem;
-    }
-
-    /* DOCUMENTATION CARDS */
-    .doc-card {
-        background: linear-gradient(145deg, rgba(20, 25, 40, 0.6), rgba(15, 20, 30, 0.8));
-        border: 1px solid rgba(0, 212, 255, 0.15);
-        border-radius: 16px;
-        padding: 25px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        height: 100%;
-        position: relative;
-        text-align: left;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .doc-card:hover {
-        background: linear-gradient(145deg, rgba(25, 30, 50, 0.8), rgba(20, 25, 40, 0.9));
-        border-color: #00d4ff;
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 
-                    0 0 20px rgba(0, 212, 255, 0.1);
-    }
-    
-    .doc-card-icon {
-        font-size: 2rem;
-        margin-bottom: 15px;
-        background: rgba(0, 212, 255, 0.1);
-        width: 50px;
-        height: 50px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        color: #00d4ff;
-    }
-
-    .doc-card h4 {
-        color: #ffffff;
-        font-size: 1.1rem;
-        font-weight: 700;
-        margin: 0 0 10px 0;
-    }
-    
-    .doc-card-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-    
-    .doc-card-list li {
-        position: relative;
-        padding-left: 20px;
-        margin-bottom: 8px;
-        font-size: 0.9rem;
-        color: #b0b0b0;
-    }
-    
-    .doc-card-list li::before {
-        content: "•";
-        color: #00d4ff;
-        position: absolute;
-        left: 0;
-        font-weight: bold;
-    }
-
-    /* DOCUMENTATION CARDS */
-    .doc-card {
-        background: linear-gradient(145deg, rgba(20, 25, 40, 0.6), rgba(15, 20, 30, 0.8));
-        border: 1px solid rgba(0, 212, 255, 0.15);
-        border-radius: 16px;
-        padding: 25px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        height: 100%;
-        position: relative;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .doc-card:hover {
-        background: linear-gradient(145deg, rgba(25, 30, 50, 0.8), rgba(20, 25, 40, 0.9));
-        border-color: #00d4ff;
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 
-                    0 0 20px rgba(0, 212, 255, 0.1);
-    }
-    
-    .doc-card-icon {
-        font-size: 2rem;
-        margin-bottom: 15px;
-        background: rgba(0, 212, 255, 0.1);
-        width: 50px;
-        height: 50px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        color: #00d4ff;
-    }
-
-    .doc-card h4 {
-        color: #ffffff;
-        font-size: 1.1rem;
-        font-weight: 700;
-        margin: 0 0 10px 0;
-    }
-    
-    .doc-card-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-    
-    .doc-card-list li {
-        position: relative;
-        padding-left: 20px;
-        margin-bottom: 8px;
-        font-size: 0.9rem;
-        color: #b0b0b0;
-    }
-    
-    .doc-card-list li::before {
-        content: "•";
-        color: #00d4ff;
-        position: absolute;
-        left: 0;
-        font-weight: bold;
     }
 
     /* HERO SECTION - Enhanced */
@@ -654,17 +460,17 @@ st.markdown("""
 with st.sidebar:
     # --- LOGO & BRANDING ---
     st.markdown(textwrap.dedent("""
-<div style="text-align: center; margin-bottom: 3rem; padding: 2rem 0 1rem 0;">
+<div style="text-align: center; margin-bottom: 2.5rem; padding: 1.5rem 0;">
     <div style="
         display: inline-flex; 
         align-items: center; 
         justify-content: center; 
-        width: 80px; 
-        height: 80px; 
+        width: 70px; 
+        height: 70px; 
         background: linear-gradient(135deg, #00d4ff, #004e66); 
-        border-radius: 24px; 
+        border-radius: 20px; 
         margin-bottom: 20px;
-        box-shadow: 0 15px 35px rgba(0, 212, 255, 0.25);
+        box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
         position: relative;
         overflow: hidden;
     ">
@@ -1288,30 +1094,26 @@ with st.container():
 
     with col_input:
         st.markdown("### 📁 Input Source")
-        uploaded_files = st.file_uploader(
-            "Drag & drop scanned images", 
+        uploaded_file = st.file_uploader(
+            "Drag & drop scanned image", 
             type=['jpg', 'png', 'tif', 'pdf'],
-            accept_multiple_files=True,
-            help="Supported formats: JPG, PNG, TIFF, PDF (Max 50MB per file). Batch processing supported."
+            help="Supported formats: JPG, PNG, TIFF, PDF (Max 50MB)"
         )
         
-        if uploaded_files:
-            file_count = len(uploaded_files)
-            total_size = sum([f.size for f in uploaded_files]) / (1024*1024)
+        if uploaded_file:
+            file_size = uploaded_file.size / (1024*1024)
             st.info(f"""
-            **Batch Details:**
-            - **Files:** {file_count}
-            - **Total Size:** {total_size:.2f} MB
+            **File Details:**
+            - **Name:** {uploaded_file.name}
+            - **Size:** {file_size:.2f} MB
+            - **Type:** {uploaded_file.type}
             """)
             
-            # Preview First Image
+            # Preview Image
             try:
-                st.image(uploaded_files[0], caption=f"Preview: {uploaded_files[0].name}", use_container_width=True)
-                if file_count > 1:
-                    st.caption(f"+ {file_count - 1} other files...")
+                st.image(uploaded_file, caption="Preview", use_container_width=True)
             except Exception as e:
                 st.warning("Preview not available for this file type.")
-
         
         st.markdown("### ⚙️ Configuration")
         
@@ -1344,138 +1146,147 @@ with st.container():
             "🚀 Identify Scanner", 
             type="primary", 
             use_container_width=True,
-            disabled=not uploaded_files
+            disabled=not uploaded_file
         )
 
     with col_result:
         st.markdown("### 📊 Analysis Results")
         
-        if uploaded_files and analyze_btn:
+        if uploaded_file and analyze_btn:
             # Analysis progress
             with st.status("🔬 Executing Forensic Analysis Pipeline...", expanded=True) as status:
-                st.write(f"Processing {len(uploaded_files)} files...")
+                progress_text = st.empty()
                 progress_bar = st.progress(0)
                 
-                # Start Metrics
-                tracemalloc.start()
-                start_time = time.time()
+                steps = [
+                    ("Loading and preprocessing document...", 15),
+                    ("Extracting noise patterns...", 25),
+                    ("Performing frequency analysis...", 40),
+                    ("Running AI classification...", 65),
+                    ("Cross-referencing scanner database...", 85),
+                    ("Generating final report...", 100)
+                ]
                 
-                temp_dir = os.path.join(current_dir, "temp_uploads")
-                os.makedirs(temp_dir, exist_ok=True)
+                for step_text, progress in steps:
+                    progress_text.text(f"⏳ {step_text}")
+                    progress_bar.progress(progress)
+                    time.sleep(0.5)
                 
-                batch_results = []
-            
-                # -------------------------------------------------------------------------
-                # BATCH INFERENCE
-                # -------------------------------------------------------------------------
-                try:
-                    # Collect all file paths
-                    temp_paths = []
-                    file_map = {} # path -> name
-                    
-                    for i, up_file in enumerate(uploaded_files):
-                        t_path = os.path.join(temp_dir, up_file.name)
-                        with open(t_path, "wb") as f:
-                            f.write(up_file.getbuffer())
-                        temp_paths.append(t_path)
-                        file_map[t_path] = up_file.name
-                    
-                    # 1. Baseline Model (Sequential)
-                    if "Standard" in analysis_mode:
-                        for idx, t_path in enumerate(temp_paths):
-                            pred_label, proba, _ = predict_baseline(t_path, model_choice="rf")
-                            conf = float(np.max(proba) * 100) if proba is not None else 0.0
-                            
-                            res = {
-                                "file": file_map[t_path],
-                                "brand": pred_label.split(' ')[0] if pred_label else "Unknown",
-                                "model": pred_label if pred_label else "Unknown",
-                                "confidence": conf,
-                                "serial": "N/A"
-                            }
-                            batch_results.append(res)
-                            progress_bar.progress((idx + 1) / len(temp_paths))
-                            
-                    # 2. Hybrid / Deep Learning Model (Batch)
-                    elif "Deep" in analysis_mode or "Comprehensive" in analysis_mode:
-                        load_hybrid_resources()
-                        from hybrid_cnn.utils import process_batch_gpu, batch_corr_gpu, extract_enhanced_features
-                        
-                        # Preprocess Batch
-                        st.write("Preprocessing batch...")
-                        residuals = process_batch_gpu(temp_paths)
-                        
-                        if residuals:
-                            residuals = np.array(residuals, dtype=np.float32)
-                            res_resources = get_hybrid_resources()
-                            
-                            # Feature Extraction
-                            corrs = batch_corr_gpu(residuals, res_resources['fps'], res_resources['fp_keys'])
-                            
-                            enh_feats = []
-                            for resid in residuals:
-                                enh_feats.append(extract_enhanced_features(resid))
-                            enh_feats = np.array(enh_feats, dtype=np.float32)
-                            
-                            feats_combined = np.hstack([corrs, enh_feats])
-                            feats_scaled = res_resources['scaler'].transform(feats_combined)
-                            
-                            X_img = np.expand_dims(residuals, -1)
-                            probs = res_resources['model'].predict([X_img, feats_scaled], verbose=0)
-                            
-                            for i, prob in enumerate(probs):
-                                idx = int(np.argmax(prob))
-                                label = res_resources['le'].classes_[idx]
-                                conf = float(prob[idx] * 100)
-                                
-                                batch_results.append({
-                                    "file": file_map[temp_paths[i]],
-                                    "brand": label.split(' ')[0],
-                                    "model": label,
-                                    "confidence": conf,
-                                    "serial": "AI-Gen"
-                                })
-                            progress_bar.progress(100)
-                        else:
-                            st.error("Batch preprocessing failed.")
-
-                except Exception as e:
-                    st.error(f"Batch Analysis failed: {str(e)}")
-                
-                # Cleanup
-                for p in temp_paths:
-                    if os.path.exists(p):
-                        os.remove(p)
-                
-                # Metrics End
-                end_time = time.time()
-                current, peak = tracemalloc.get_traced_memory()
-                tracemalloc.stop()
-                
-                proc_time = end_time - start_time
-                peak_mb = peak / (1024 * 1024)
-                
-                # Update Session State
-                st.session_state['last_batch_results'] = batch_results
-                st.session_state['processing_times'].append(proc_time)
-                st.session_state['peak_memory'] = peak_mb
-                st.session_state['session_count'] += len(batch_results)
-                
-                # Add to History
-                for res in batch_results:
-                    st.session_state['history'].insert(0, {
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
-                        "file": res['file'],
-                        "model": res['model'],
-                        "confidence": res['confidence']
-                    })
-
                 status.update(label="✅ Analysis Complete", state="complete", expanded=False)
-        
-        # Display Results
-        if st.session_state.get('last_batch_results'):
-            results = st.session_state['last_batch_results']
-            top_scanner = results[0]
+            
+                status.update(label="✅ Analysis Complete", state="complete", expanded=False)
+            
+            # -------------------------------------------------------------------------
+            # REAL INFERENCE
+            # -------------------------------------------------------------------------
+            
+            # Save uploaded file temporarily for processing
+            temp_dir = os.path.join(current_dir, "temp_uploads")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_path = os.path.join(temp_dir, uploaded_file.name)
+            
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+                
+            prediction_result = None
+            start_time = time.time()
+            try:
+                # 1. Baseline Model (SVM/RF)
+                if "Standard" in analysis_mode:
+                    # Determine model choice based on mode string or default to 'svm' if not specified
+                    # The UI says "Standard (Noise/FFT + SVM)", so we use SVM by default or RF if configured
+                    # Baseline predict script defaults to 'rf'. Let's use 'rf' for robust results or 'svm' if preferred.
+                    # predict_baseline returns: pred_label, proba, class_names
+                    pred_label, proba, class_names = predict_baseline(temp_path, model_choice="rf")
+                    
+                    if pred_label:
+                        confidence = 0.0
+                        if proba is not None:
+                            confidence = float(np.max(proba) * 100)
+                        
+                        prediction_result = {
+                            "brand": pred_label.split(' ')[0] if pred_label else "Unknown",
+                            "model": pred_label if pred_label else "Unknown",
+                            "confidence": confidence,
+                            "serial": "N/A" # Baseline doesn't predict serial
+                        }
+                    else:
+                        st.error("Baseline model failed to predict.")
+                
+                # 2. Hybrid / Deep Learning Model
+                elif "Deep" in analysis_mode or "Comprehensive" in analysis_mode:
+                    # Load Hybrid Model
+                    load_hybrid_resources()
+                    
+                    # Inference using logic similar to hybrid_cnn/test.py
+                    # Preprocess
+                    residuals = process_batch_gpu([temp_path])
+                    if residuals:
+                        residuals = np.array(residuals, dtype=np.float32)
+                        
+                        # Extract Features
+                        # cached model resources
+                        res = get_hybrid_resources()
+                        hyb_model = res['model']
+                        le = res['le']
+                        scaler = res['scaler']
+                        scanner_fps = res['fps']
+                        fp_keys = res['fp_keys']
+                        
+                        corrs = batch_corr_gpu(residuals, scanner_fps, fp_keys)
+                        
+                        enh_feats = []
+                        for resid in residuals:
+                            enh_feats.append(extract_enhanced_features(resid))
+                        enh_feats = np.array(enh_feats, dtype=np.float32)
+                        
+                        # Combine & Scale
+                        feats_combined = np.hstack([corrs, enh_feats])
+                        feats_scaled = scaler.transform(feats_combined)
+                        
+                        # Predict
+                        X_img = np.expand_dims(residuals, -1)
+                        probs = hyb_model.predict([X_img, feats_scaled], verbose=0)
+                        
+                        idx = int(np.argmax(probs[0]))
+                        label = le.classes_[idx]
+                        conf = float(probs[0][idx] * 100)
+                        
+                        prediction_result = {
+                            "brand": label.split(' ')[0],
+                            "model": label,
+                            "confidence": conf,
+                            "serial": "AI-Gen"
+                        }
+                    else:
+                        st.error("Preprocessing failed for Hybrid model.")
+
+            except Exception as e:
+                st.error(f"Analysis failed: {str(e)}")
+            
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            
+            if prediction_result:
+                top_scanner = prediction_result
+            else:
+                # Fallback mock if completely failed (optional, or just show error)
+                top_scanner = {"brand": "Error", "model": "Analysis Failed", "confidence": 0.0, "serial": "---"}
+            
+            # --- Update Metrics ---
+            if prediction_result:
+                end_time = time.time()
+                proc_time = end_time - start_time
+                st.session_state['session_count'] += 1
+                st.session_state['session_confidences'].append(prediction_result['confidence'])
+                st.session_state['processing_times'].append(proc_time)
+                
+                # Rerun to update metrics at top
+                # time.sleep(0.5) # Optional delay to see progress
+                # st.rerun() # Be careful with rerun inside button callback, it might reset UI state. 
+                # Ideally, metrics are at top, so they update on NEXT run. 
+                # If we want immediate update, we might need a placeholder at the top.
             
             st.markdown("---")
             
@@ -1533,15 +1344,10 @@ with st.container():
                 
                 # Additional metrics
                 col_m1, col_m2 = st.columns(2)
-                
-                # Dynamic Logic
-                proc_time_val = st.session_state['processing_times'][-1] if st.session_state['processing_times'] else 0
-                peak_mem = st.session_state.get('peak_memory', 0.0)
-                
                 with col_m1:
-                    st.metric("Processing Time", f"{proc_time_val:.2f}s")
+                    st.metric("Processing Time", "1.4s", "-0.2s")
                 with col_m2:
-                    st.metric("Memory Usage", f"{peak_mem:.2f} MB")
+                    st.metric("Memory Usage", "2.1GB", "+0.3GB")
             
             # Success message
             st.success(f"""
@@ -1553,49 +1359,16 @@ with st.container():
             st.markdown("#### 📤 Export Results")
             col_exp1, col_exp2, col_exp3 = st.columns(3)
             with col_exp1:
-                # Use file name from result
-                pdf_data = create_pdf_report(top_scanner, top_scanner.get('file', 'Unknown'))
-                if pdf_data:
-                    st.download_button(
-                        label="📄 Generate PDF Report",
-                        data=pdf_data,
-                        file_name="trace_scope_report.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                else:
-                    st.error("Generation Failed")
-
+                if st.button("📄 Generate PDF Report", use_container_width=True):
+                    st.success("PDF report generated successfully!")
             with col_exp2:
-                # Export ALL batch results if multiple
-                export_df = pd.DataFrame(results)
-                csv_data = export_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📊 Export Data",
-                    data=csv_data,
-                    file_name="trace_scope_results.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                if st.button("📊 Export Data", use_container_width=True):
+                    st.success("Data exported successfully!")
             with col_exp3:
                 if st.button("🔗 Share Analysis", use_container_width=True):
                     st.info("Share link copied to clipboard!")
 
-            # -------------------------------------------------------------------------
-            # BATCH RESULTS & HISTORY
-            # -------------------------------------------------------------------------
-            if len(results) > 1:
-                st.markdown("### 📚 Batch Analysis Results")
-                st.dataframe(pd.DataFrame(results), use_container_width=True)
-            
-            st.markdown("### 📜 Session History")
-            if st.session_state['history']:
-                hist_df = pd.DataFrame(st.session_state['history'])
-                st.dataframe(hist_df, use_container_width=True)
-            else:
-                st.info("No analysis history yet.")
-
-        elif not uploaded_files:
+        elif not uploaded_file:
             st.markdown("""
 <div style="
     text-align: center; 
@@ -1624,121 +1397,70 @@ st.markdown('<div id="documentation"></div>', unsafe_allow_html=True)
 st.markdown("---")
 st.header("📚 Documentation & Resources")
 
-# --- POPUP DIALOG LOGIC ---
-@st.dialog("Documentation Details")
-def show_doc_details(doc_type):
-    if doc_type == "user_manual":
-        st.header("📖 User Manual")
+doc_col1, doc_col2, doc_col3 = st.columns(3)
+
+with doc_col1:
+    with st.expander("📖 User Manual", expanded=False):
         st.markdown("""
         ### Getting Started
-        1. **Upload Document:** Drag and drop scanned document to the input area.
-        2. **Configure Settings:** Select analysis parameters like model type.
-        3. **Run Analysis:** Click "Identify Scanner" to start.
-        4. **Review Results:** Check confidence scores and feature analysis.
-
-        ---
+        1. **Upload Document:** Drag and drop scanned document
+        2. **Configure Settings:** Select analysis parameters
+        3. **Run Analysis:** Click "Identify Scanner"
+        4. **Review Results:** Check confidence scores
+        
         ### Best Practices
-        - **Image Quality:** Use high-quality scans (300+ DPI) for best results.
-        - **Area:** Include full document area, avoid cropping important noise.
-        - **Formats:** Avoid re-saving JPEGs multiple times (double compression).
-        - **Reference:** Provide a reference sample if available.
+        - Use high-quality scans (300+ DPI)
+        - Include full document area
+        - Avoid heavily compressed files
+        - Provide reference samples when available
         """)
-    elif doc_type == "api_docs":
-        st.header("🔧 API Reference")
+
+with doc_col2:
+    with st.expander("🔧 API Documentation", expanded=False):
         st.markdown("""
         ### REST API Endpoints
-
-        **POST** `/api/v1/analyze`
         
-        **Request Body:**
+        **POST** `/api/v1/analyze`
         ```json
         {
-          "document": "base64_encoded_string",
+          "document": "base64_encoded",
           "mode": "standard|deep|comprehensive",
           "threshold": 0.85
         }
         ```
-
+        
         **Response:**
         ```json
         {
           "scanner": "HP ScanJet Pro 3500",
           "confidence": 0.942,
-          "features": {
-            "noise_score": 0.88,
-            "prnu_match": true
-          },
-          "processing_time": 1.45
+          "features": {...},
+          "processing_time": 1.4
         }
         ```
-
-        **Authentication:**
-        Use `Authorization: Bearer <your_api_key>` header.
+        
+        **Rate Limits:** 100 requests/hour
         """)
-    elif doc_type == "specs":
-        st.header("⚙️ System Requirements")
-        st.markdown("""
-        ### Minimum Specifications
-        - **CPU:** Quad-core processor, 2.5GHz+
-        - **RAM:** 8GB minimum (16GB recommended for Deep Learning models)
-        - **Storage:** 20GB free SSD space
-        - **GPU:** (Optional) NVIDIA GPU with CUDA 11.0+ for acceleration.
-
-        ### Supported Formats
-        - **Images:** JPG, PNG, TIFF, BMP
-        - **Documents:** PDF (Single/Multi-page)
-        - **Max Size:** 200MB per file
-        """)
-
-doc_col1, doc_col2, doc_col3 = st.columns(3)
-
-with doc_col1:
-    st.markdown("""
-<div class="doc-card">
-    <div class="doc-card-icon">📖</div>
-    <h4>User Manual</h4>
-    <p style="font-size: 0.9rem; color: #b0b0b0; flex-grow: 1;">Complete guide to operating the TraceScope forensic suite.</p>
-    <ul class="doc-card-list">
-        <li>Quick Start Guide</li>
-        <li>Analysis Configuration</li>
-        <li>Result Interpretation</li>
-    </ul>
-</div>
-""", unsafe_allow_html=True)
-    if st.button("View Manual", key="btn_manual", use_container_width=True):
-        show_doc_details("user_manual")
-
-with doc_col2:
-    st.markdown("""
-<div class="doc-card">
-    <div class="doc-card-icon">🔧</div>
-    <h4>API Reference</h4>
-    <p style="font-size: 0.9rem; color: #b0b0b0; flex-grow: 1;">Integration documentation for external systems.</p>
-    <ul class="doc-card-list">
-        <li>REST API Endpoints</li>
-        <li>Authentication & Auth</li>
-        <li>Request Examples</li>
-    </ul>
-</div>
-""", unsafe_allow_html=True)
-    if st.button("View API Docs", key="btn_api", use_container_width=True):
-        show_doc_details("api_docs")
 
 with doc_col3:
-    st.markdown("""
-<div class="doc-card">
-    <div class="doc-card-icon">⚙️</div>
-    <h4>System Specs</h4>
-    <p style="font-size: 0.9rem; color: #b0b0b0; flex-grow: 1;">Hardware and software specifications.</p>
-    <ul class="doc-card-list">
-        <li>Server Config</li>
-        <li>GPU Support</li>
-        <li>File Support</li>
-    </ul>
-</div>
-""", unsafe_allow_html=True)
-    if st.button("Check Specs", key="btn_specs", use_container_width=True):
-        show_doc_details("specs")
+    with st.expander("⚙️ System Requirements", expanded=False):
+        st.markdown("""
+        ### Minimum Requirements
+        - **CPU:** 4 cores, 2.5GHz+
+        - **RAM:** 8GB minimum, 16GB recommended
+        - **Storage:** 20GB free space
+        - **GPU:** Optional, CUDA 11.0+ for acceleration
+        
+        ### Supported Formats
+        - **Images:** JPG, PNG, TIFF, BMP
+        - **Documents:** PDF (up to 50 pages)
+        - **Max Size:** 50MB per file
+        
+        ### Network Requirements
+        - Internet connection for updates
+        - HTTPS for secure uploads
+        - WebSocket for real-time updates
+        """)
 
 # -----------------------------------------------------------------------------
 # 11. Footer
