@@ -2,14 +2,24 @@ import os
 import cv2
 import csv
 import numpy as np
+from pathlib import Path
+import sys
+
 from skimage import io, img_as_float
 from skimage.restoration import denoise_wavelet
 from skimage.filters import sobel
 from scipy.stats import skew, kurtosis, entropy
 
+# Ensure configs module can be imported
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+try:
+    from configs.config import RAW_OFFICIAL_DIR, PROCESSED_DATA_DIR
+    DATASET_OFFICIAL = str(RAW_OFFICIAL_DIR)
+    OUTPUT_DIR = str(PROCESSED_DATA_DIR / "Official")
+except ImportError:
+    DATASET_OFFICIAL = "data/Official"
+    OUTPUT_DIR = "data/processed/Official"
 
-DATASET_OFFICIAL = "data/Official"
-OUTPUT_DIR = "processed_data/Official"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 CSV_PATH = os.path.join(OUTPUT_DIR, "metadata_features.csv")
 
@@ -75,17 +85,16 @@ def preprocess_official_dataset(official_dir, out_dir, csv_path):
         "entropy", "edge_density"
     ]
 
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
         # Walk through all folders and subfolders
         for root, dirs, files in os.walk(official_dir):
-            # Skip root if it's the main dataset folder (to infer scanner_id)
             if root == official_dir:
                 continue
 
-            # Infer scanner_id from first level folder
             scanner_id = os.path.basename(os.path.dirname(root))
             subfolder_name = os.path.basename(root)
 

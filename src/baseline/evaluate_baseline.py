@@ -1,73 +1,67 @@
-import os
 import pandas as pd
 import joblib
 from sklearn.metrics import classification_report, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
+import os
+from pathlib import Path
+import sys
 
+# Ensure configs module can be imported
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+try:
+    from configs.config import METADATA_CSV, SCALER_PATH, RF_MODEL_PATH, SVM_MODEL_PATH, RESULTS_DIR
+    CSV_PATH = str(METADATA_CSV)
+    DEFAULT_RESULTS_DIR = str(RESULTS_DIR)
+except ImportError:
+    CSV_PATH = "data/metadata_features.csv"
+    SCALER_PATH = Path("models/scaler.pkl")
+    RF_MODEL_PATH = Path("models/random_forest.pkl")
+    SVM_MODEL_PATH = Path("models/svm.pkl")
+    DEFAULT_RESULTS_DIR = "results"
 
-# Paths
-CSV_PATH      = "processed_data/test_split.csv"
-MODEL_DIR     = "models/baseline"
-SCALER_PATH   = os.path.join(MODEL_DIR, "scaler.joblib")
-ENCODER_PATH  = os.path.join(MODEL_DIR, "label_encoder.joblib")
+def evaluate_model(model_path, name, save_dir=None):
+    if save_dir is None:
+        save_dir = DEFAULT_RESULTS_DIR
 
-
-def evaluate_model(model_path, name, save_dir="results"):
-    # 1) Load dataset
+    # Load dataset
     df = pd.read_csv(CSV_PATH)
-
-    # Same feature selection as training
-    drop_cols = ["file_name", "dataset_source", "main_class", "resolution", "class_label"]
-    feature_cols = [c for c in df.columns if c not in drop_cols]
-
+    feature_cols = [c for c in df.columns if c not in ["file_name", "main_class", "resolution", "class_label"]]
     X = df[feature_cols]
-    y_str = df["class_label"]          # original string labels
+    y = df["class_label"]
 
-    # 2) Load scaler, label encoder and model
+    # Load scaler + model
     scaler = joblib.load(SCALER_PATH)
-    le = joblib.load(ENCODER_PATH)
     model = joblib.load(model_path)
 
-    # Encode y using SAME encoder as training
-    y_true = le.transform(y_str)
-
-    # 3) Transform features and predict
+    # Transform features
     X_scaled = scaler.transform(X)
     y_pred = model.predict(X_scaled)
 
-    # 4) Classification report (decode back to class names)
-    target_names = le.classes_
+    # Print report
     print(f"\n=== {name} Evaluation ===")
-    print(classification_report(y_true, y_pred, target_names=target_names))
+    print(classification_report(y, y_pred))
 
-    # 5) Confusion matrix (in encoded space, but show class names)
-    cm = confusion_matrix(y_true, y_pred)
-
+    # Confusion Matrix
+    cm = confusion_matrix(y, y_pred, labels=model.classes_)
     plt.figure(figsize=(8, 6))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        xticklabels=target_names,
-        yticklabels=target_names,
-        cmap="Blues"
-    )
+    sns.heatmap(cm, annot=True, fmt="d",
+                xticklabels=model.classes_,
+                yticklabels=model.classes_,
+                cmap="Blues")
     plt.title(f"{name} Confusion Matrix")
     plt.xlabel("Predicted")
     plt.ylabel("True")
 
+    # Ensure results directory exists
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, f"{name.replace(' ', '_')}_confusion_matrix.png")
+
+    # Save figure
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    print(f"Confusion matrix image saved to: {save_path}")
-
-    plt.show()
-
+    print(f" Confusion matrix saved to: {save_path}")
+    plt.close()
 
 if __name__ == "__main__":
-    # Random Forest
-    evaluate_model(os.path.join(MODEL_DIR, "random_forest.joblib"), "Random Forest")
-
-    # SVM (agar chahiye to uncomment karo)
-    # evaluate_model(os.path.join(MODEL_DIR, "svm.joblib"), "SVM")
+    evaluate_model(RF_MODEL_PATH, "Random Forest")
+    evaluate_model(SVM_MODEL_PATH, "SVM")

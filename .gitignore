@@ -1,34 +1,49 @@
-# Python virtual environment
-venv/
-.env/
-
-# Python cache
+# Python Caches & Environments
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Data folders
-data/
-processed_data/
-processed_wikipedia/
+# Jupyter & IDEs
+.ipynb_checkpoints
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Results / outputs
-results/
+# Large Datasets & Raw Images (Excluding placeholder structure)
+data/Official/*
+!data/Official/.gitkeep
+data/Wikipedia/*
+!data/Wikipedia/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
 
-# ML models (BIG FILES)
-models/*.joblib
-models/*.pkl
-models/*.h5
-models/*.pt
-models/*.onnx
-models/
-# Streamlit cache
-.streamlit/
+# Temporary & Log files
+*.log
+*.tmp
+scratch/
 
-# OS files
+# OS specific files
 .DS_Store
 Thumbs.db
-
-# Ignore trained ML models
-*.pkl
-*.joblib
-

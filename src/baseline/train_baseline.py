@@ -1,100 +1,57 @@
 import pandas as pd
-df = pd.read_csv("processed_data/combined_features.csv")
-print(df.shape)
-
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
-from sklearn.metrics import classification_report, accuracy_score
 import joblib
+from pathlib import Path
+import sys
 import os
 
-# Paths
-CSV_PATH = "processed_data/combined_features.csv"
-MODEL_DIR = "models/baseline"
-os.makedirs(MODEL_DIR, exist_ok=True)
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 
-def train_baseline_models():
-    print(f"Loading data from {CSV_PATH}...")
-    try:
-        df = pd.read_csv(CSV_PATH)
-    except FileNotFoundError:
-        print(f"Error: {CSV_PATH} not found. Run preprocessing first.")
-        return
+# Ensure configs module can be imported
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+try:
+    from configs.config import METADATA_CSV, RF_MODEL_PATH, SVM_MODEL_PATH, SCALER_PATH, MODELS_DIR
+    CSV_PATH = str(METADATA_CSV)
+except ImportError:
+    CSV_PATH = "data/metadata_features.csv"
+    MODELS_DIR = Path("models")
+    RF_MODEL_PATH = MODELS_DIR / "random_forest.pkl"
+    SVM_MODEL_PATH = MODELS_DIR / "svm.pkl"
+    SCALER_PATH = MODELS_DIR / "scaler.pkl"
 
-    if df.empty:
-        print("Error: Dataset is empty.")
-        return
+os.makedirs(os.path.dirname(RF_MODEL_PATH), exist_ok=True)
 
-    print(f"Dataset loaded. Shape: {df.shape}")
-    print(f"Sources: {df['dataset_source'].unique()}")
-
-    # Features and Target
-    # Dropping non-feature columns
-    drop_cols = ["file_name", "dataset_source", "main_class", "resolution", "class_label"]
-    feature_cols = [c for c in df.columns if c not in drop_cols]
+def train_models():
+    df = pd.read_csv(CSV_PATH)
     
+    # Drop non-feature columns
+    feature_cols = [c for c in df.columns if c not in ["file_name", "main_class", "resolution", "class_label"]]
     X = df[feature_cols]
     y = df["class_label"]
 
-    print(f"Features: {feature_cols}")
-    print(f"Target distribution:\n{y.value_counts()}")
-
-    # Encoding Target
-    le = LabelEncoder()
-    y_encoded = le.fit_transform(y)
-    
-    if len(le.classes_) < 2:
-        print(f"Error: Not enough classes for classification. Found {len(le.classes_)}: {le.classes_}")
-        print("Wait for preprocessing to finish extracting data from multiple classes.")
-        return
-
-    joblib.dump(le, os.path.join(MODEL_DIR, "label_encoder.joblib"))
-
-    # Train/Test Split
-    # Stratify by target to ensure balanced classes in split
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
+        X, y, test_size=0.2, stratify=y, random_state=42
     )
 
-    # train_baseline.py ke andar, train_test_split ke baad:
-    test_df = df.loc[X_test.index]
-    test_df.to_csv("processed_data/test_split.csv", index=False)
-
-
-    # Scaling
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-    joblib.dump(scaler, os.path.join(MODEL_DIR, "scaler.joblib"))
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
 
-    # --- Random Forest ---
-    print("\n--- Training Random Forest ---")
-    rf = RandomForestClassifier(n_estimators=100, random_state=42)
-    rf.fit(X_train_scaled, y_train)
-    
-    y_pred_rf = rf.predict(X_test_scaled)
-    acc_rf = accuracy_score(y_test, y_pred_rf)
-    print(f"Random Forest Accuracy: {acc_rf:.4f}")
-    print("Classification Report (RF):")
-    print(classification_report(y_test, y_pred_rf, target_names=le.classes_))
-    
-    joblib.dump(rf, os.path.join(MODEL_DIR, "random_forest.joblib"))
+    # Train Random Forest
+    rf = RandomForestClassifier(n_estimators=300, random_state=42)
+    rf.fit(X_train, y_train)
+    joblib.dump(rf, RF_MODEL_PATH)
 
-    # --- SVM ---
-    print("\n--- Training SVM ---")
-    svm = SVC(kernel='rbf', C=1.0, random_state=42)
-    svm.fit(X_train_scaled, y_train)
-    
-    y_pred_svm = svm.predict(X_test_scaled)
-    acc_svm = accuracy_score(y_test, y_pred_svm)
-    print(f"SVM Accuracy: {acc_svm:.4f}")
-    print("Classification Report (SVM):")
-    print(classification_report(y_test, y_pred_svm, target_names=le.classes_))
-    
-    joblib.dump(svm, os.path.join(MODEL_DIR, "svm.joblib"))
+    # Train SVM
+    svm = SVC(kernel="rbf", C=10, gamma="scale", probability=True)
+    svm.fit(X_train, y_train)
+    joblib.dump(svm, SVM_MODEL_PATH)
+
+    joblib.dump(scaler, SCALER_PATH)
+
+    print(" Models trained and saved successfully!")
 
 if __name__ == "__main__":
-    train_baseline_models()
+    train_models()

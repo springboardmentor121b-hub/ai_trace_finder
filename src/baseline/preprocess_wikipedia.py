@@ -2,13 +2,24 @@ import os
 import cv2
 import csv
 import numpy as np
+from pathlib import Path
+import sys
+
 from skimage import io, img_as_float
 from skimage.restoration import denoise_wavelet
 from skimage.filters import sobel
 from scipy.stats import skew, kurtosis, entropy
 
-DATASET_wikipedia = "data/wikipedia"            # lowercase wikipedia dataset path
-OUTPUT_DIR = "processed_data/wikipedia"         # output directory for wikipedia
+# Ensure configs module can be imported
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+try:
+    from configs.config import RAW_WIKI_DIR, PROCESSED_DATA_DIR
+    DATASET_WIKI = str(RAW_WIKI_DIR)
+    OUTPUT_DIR = str(PROCESSED_DATA_DIR / "Wikipedia")
+except ImportError:
+    DATASET_WIKI = "data/Wikipedia"
+    OUTPUT_DIR = "data/processed/Wikipedia"
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 CSV_PATH = os.path.join(OUTPUT_DIR, "metadata_features.csv")
 
@@ -17,12 +28,10 @@ def load_and_preprocess(img_path, size=(512, 512)):
     img = img_as_float(img)
     return cv2.resize(img, size, interpolation=cv2.INTER_AREA)
 
-# Noise residual extraction
 def extract_noise_residual(img):
     denoised = denoise_wavelet(img, channel_axis=None, rescale_sigma=True)
     return img - denoised
 
-# Patch extraction function
 def extract_patches(img, patch_size=128, stride=128):
     patches = []
     h, w = img.shape
@@ -31,8 +40,7 @@ def extract_patches(img, patch_size=128, stride=128):
             patches.append(img[i:i+patch_size, j:j+patch_size])
     return patches
 
-# Metadata features computation
-def compute_metadata_features(img, file_path, page_id, resolution="unknown"):
+def compute_metadata_features(img, file_path, scanner_id):
     h, w = img.shape
     aspect_ratio = w / h
     file_size_kb = os.path.getsize(file_path) / 1024
@@ -49,9 +57,8 @@ def compute_metadata_features(img, file_path, page_id, resolution="unknown"):
 
     return {
         "file_name": os.path.basename(file_path),
-        "main_class": "wikipedia",
-        "resolution": resolution,
-        "class_label": page_id,
+        "main_class": "Wikipedia",
+        "class_label": scanner_id,
         "width": w,
         "height": h,
         "aspect_ratio": aspect_ratio,
@@ -64,55 +71,55 @@ def compute_metadata_features(img, file_path, page_id, resolution="unknown"):
         "edge_density": edge_density
     }
 
-# Preprocessing main function
 def preprocess_wikipedia_dataset(wiki_dir, out_dir, csv_path):
+
     fieldnames = [
-        "file_name", "main_class", "resolution", "class_label",
+        "file_name", "main_class", "class_label",
         "width", "height", "aspect_ratio", "file_size_kb",
         "mean_intensity", "std_intensity", "skewness", "kurtosis",
         "entropy", "edge_density"
     ]
 
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     with open(csv_path, "w", newline="") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
-        # Walk through all subfolders of dataset
         for root, dirs, files in os.walk(wiki_dir):
             if root == wiki_dir:
                 continue
 
-            page_id = os.path.basename(os.path.dirname(root))
-            subfolder_name = os.path.basename(root)
+            scanner_id = os.path.basename(root)
 
-            save_path = os.path.join(out_dir, page_id, subfolder_name)
+            save_path = os.path.join(out_dir, scanner_id)
             os.makedirs(save_path, exist_ok=True)
 
-            files_processed = 0
+            count = 0
             for file in files:
-                if not file.lower().endswith(('.png', '.tif', '.jpg', '.jpeg')):
+                if not file.lower().endswith(('.png', '.jpg', '.jpeg', '.tif')):
                     continue
 
                 img_path = os.path.join(root, file)
+                
                 try:
                     img = load_and_preprocess(img_path)
                 except Exception as e:
-                    print(f" Failed to read {img_path}: {e}")
+                    print(f"Error reading: {img_path} — {e}")
                     continue
 
                 residual = extract_noise_residual(img)
                 patches = extract_patches(residual)
+
                 for idx, patch in enumerate(patches):
                     out_name = f"{os.path.splitext(file)[0]}_{idx}.npy"
                     np.save(os.path.join(save_path, out_name), patch)
 
-                features = compute_metadata_features(img, img_path, page_id)
+                features = compute_metadata_features(img, img_path, scanner_id)
                 writer.writerow(features)
-                files_processed += 1
+                count += 1
 
-            if files_processed > 0:
-                print(f" Processed {files_processed} files in folder: {root}")
+            print(f"Processed {count} images from: {scanner_id}")
 
 if __name__ == "__main__":
-    preprocess_wikipedia_dataset(DATASET_wikipedia, OUTPUT_DIR, CSV_PATH)
-    print("wikipedia preprocessing + metadata feature extraction complete.")
+    preprocess_wikipedia_dataset(DATASET_WIKI, OUTPUT_DIR, CSV_PATH)
+    print("Wikipedia preprocessing complete!")
