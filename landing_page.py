@@ -16,12 +16,18 @@ with st.sidebar:
     st.markdown("---")
 
     st.markdown("### 📂 Navigation")
-    st.page_link("pages/home.py", label="🏠 Home")
-    st.page_link("pages/upload_file.py", label="📤 Upload Document")
-    st.page_link("pages/live_prediction.py", label="🔮 Live Prediction")
-    st.page_link("pages/about_project.py", label="ℹ️ About Project")
+
+    st.page_link("landing_page.py", label="🏠 Home")
+    st.page_link("pages/1_Flowchart.py", label="📊 Flowchart")
+    st.page_link("pages/2_Mechanism.py", label="⚙️ Mechanism")
+    st.page_link("pages/3_Feature_Extraction.py", label="🔬 Feature Extraction")
+    st.page_link("pages/4_Model_Results.py", label="📈 Model Results")
+    st.page_link("pages/5_Predict_Scanner.py", label="🔮 Predict Scanner")
+    st.page_link("pages/6_Applications.py", label="📱 Applications")
+    st.page_link("pages/7_About_Project.py", label="ℹ️ About Project")
 
     st.markdown("---")
+
     st.info(
         "⚙️ Models Used:\n"
         "- CNN\n"
@@ -48,13 +54,22 @@ st.markdown("---")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.success("📤 **Upload Scanned Documents**\n\nSupports JPG, PNG, JPEG formats")
+    st.success(
+        "📤 **Upload Scanned Documents**\n\n"
+        "Supports JPG, PNG, JPEG formats"
+    )
 
 with col2:
-    st.info("🤖 **Multiple AI Models**\n\nCNN, Random Forest, SVM")
+    st.info(
+        "🤖 **Multiple AI Models**\n\n"
+        "CNN, Random Forest, SVM"
+    )
 
 with col3:
-    st.warning("📊 **Detailed Predictions**\n\nModel name, result & confidence score")
+    st.warning(
+        "📊 **Detailed Predictions**\n\n"
+        "Model name, result & confidence score"
+    )
 
 st.markdown("---")
 
@@ -74,12 +89,12 @@ st.markdown("---")
 cta_col1, cta_col2 = st.columns(2)
 
 with cta_col1:
-    if st.button("📤 Upload Document", use_container_width=True):
-        st.switch_page("pages/upload_file.py")
+    if st.button("📊 View Model Results", use_container_width=True):
+        st.switch_page("pages/4_Model_Results.py")
 
 with cta_col2:
-    if st.button("🔮 Run Live Prediction", use_container_width=True):
-        st.switch_page("pages/live_prediction.py")
+    if st.button("🔮 Run Scanner Prediction", use_container_width=True):
+        st.switch_page("pages/5_Predict_Scanner.py")
 
 # -------------------- FOOTER --------------------
 st.markdown("---")
